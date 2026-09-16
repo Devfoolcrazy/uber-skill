@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand};
-use uber_skill_core::{install, lint, search, Config, DriftState, Library, Query, Target};
+use uber_skill_core::{install, lint, search, Config, DriftState, ItemKind, Library, Query, Target};
 
 #[derive(Parser)]
 #[command(name = "uber-skill", version, about = "Manage a library of agent skills")]
@@ -13,6 +13,9 @@ struct Cli {
     /// Output JSON instead of text
     #[arg(long, global = true)]
     json: bool,
+    /// Work on skills (default) or agents
+    #[arg(short, long, global = true, default_value = "skill", value_parser = ["skill", "agent"])]
+    kind: String,
     #[command(subcommand)]
     cmd: Cmd,
 }
@@ -143,20 +146,27 @@ enum Cmd {
 #[derive(Subcommand)]
 enum ConfigCmd {
     Show,
-    /// Set the library root
+    /// Set the library root (skills in <root>/skills, agents in <root>/agents)
     SetLibrary { path: PathBuf },
+    /// Set a separate agents folder (default: <root>/agents)
+    SetAgents { path: PathBuf },
     /// Set the external editor command (e.g. `code`)
     SetEditor { command: String },
 }
 
+fn kind_of(cli: &Cli) -> ItemKind {
+    ItemKind::parse(&cli.kind).unwrap_or_default()
+}
+
 fn open_library(cli: &Cli) -> Result<Library> {
+    let kind = kind_of(cli);
     let path = match &cli.library {
         Some(p) => p.clone(),
-        None => Config::load()?.library_path().context(
+        None => Config::load()?.path_for(kind).context(
             "no library configured: run `uber-skill config set-library <path>` or pass --library",
         )?,
     };
-    Library::open(&path).with_context(|| format!("opening library {}", path.display()))
+    Library::open_kind(&path, kind).with_context(|| format!("opening {} library {}", kind.label(), path.display()))
 }
 
 fn print_json<T: serde::Serialize>(v: &T) -> Result<()> {
@@ -175,6 +185,8 @@ fn main() -> Result<()> {
                 }
                 println!("config file: {}", uber_skill_core::config::config_path().map(|p| p.display().to_string()).unwrap_or_default());
                 println!("library:     {}", cfg.library_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "(not set)".into()));
+                println!("skills:      {}", cfg.skills_path().map(|p| p.display().to_string()).unwrap_or_else(|_| "(not set)".into()));
+                println!("agents:      {}", cfg.agents_path().map(|p| p.display().to_string()).unwrap_or_else(|_| "(not set)".into()));
                 println!("editor:      {}", cfg.editor_command.as_deref().unwrap_or("(default)"));
                 for p in &cfg.recent_projects {
                     println!("project:     {} [{}]", p.path.display(), p.target.label());
@@ -187,6 +199,14 @@ fn main() -> Result<()> {
                 cfg.library_path = Some(path.clone());
                 cfg.save()?;
                 println!("library set to {}", path.display());
+            }
+            ConfigCmd::SetAgents { path } => {
+                let path = path.canonicalize().with_context(|| format!("{}", path.display()))?;
+                Library::open_kind(&path, ItemKind::Agent)?;
+                let mut cfg = Config::load()?;
+                cfg.agents_path = Some(path.clone());
+                cfg.save()?;
+                println!("agents library set to {}", path.display());
             }
             ConfigCmd::SetEditor { command } => {
                 let mut cfg = Config::load()?;
@@ -221,7 +241,7 @@ fn main() -> Result<()> {
             for w in &scan.warnings {
                 eprintln!("warning: {}: {}", w.path.display(), w.message);
             }
-            eprintln!("{} skill(s)", hits.len());
+            eprintln!("{} {}(s)", hits.len(), kind_of(&cli).label());
         }
         Cmd::Show { id } => {
             let lib = open_library(&cli)?;
@@ -288,7 +308,7 @@ fn main() -> Result<()> {
             let mut total_errors = 0;
             let mut report = Vec::new();
             for s in &skills {
-                let issues = lint::lint_dir(&s.path)?;
+                let issues = lint::lint_item(&s.path, s.kind)?;
                 total_errors += issues.iter().filter(|i| i.severity == lint::Severity::Error).count();
                 if cli.json {
                     report.push(serde_json::json!({ "id": s.id, "issues": issues }));
@@ -316,33 +336,37 @@ fn main() -> Result<()> {
             }
             let lib = open_library(&cli)?;
             let (root, target) = project_root(project)?;
+            let dir = target.dir_for(lib.kind(), &root)?;
             for id in ids {
                 let s = lib.get(id)?;
                 if let Some(w) = install::host_mismatch(&s, &target) {
                     eprintln!("warning: {w}");
                 }
-                let e = install::install(&s, &root, &target)?;
-                println!("installed {} -> {}", id, target.dir(&root).join(id).display());
-                let _ = e;
+                install::install(&s, &root, &target)?;
+                println!("installed {} -> {}", id, install::installed_path(&dir, id, s.kind).display());
             }
             remember(&root, &target)?;
         }
         Cmd::Uninstall { ids, project } => {
             let (root, target) = project_root(project)?;
             for id in ids {
-                install::uninstall(id, &root, &target)?;
+                install::uninstall(id, &root, &target, kind_of(&cli))?;
                 println!("removed {id}");
             }
         }
         Cmd::Status { project } => {
             let lib = open_library(&cli).ok();
             let (root, target) = project_root(project)?;
-            let st = install::status(lib.as_ref(), &root, &target)?;
+            let kind = kind_of(&cli);
+            let st = install::status(lib.as_ref(), &root, &target, kind)?;
             if cli.json {
                 return print_json(&st);
             }
             if st.is_empty() {
-                println!("no skills in {}", target.dir(&root).display());
+                match target.dir_for(kind, &root) {
+                    Ok(d) => println!("no {}s in {}", kind.label(), d.display()),
+                    Err(e) => println!("{e}"),
+                }
             }
             for s in &st {
                 let label = match s.state {

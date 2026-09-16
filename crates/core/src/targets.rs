@@ -1,13 +1,16 @@
-//! Where skills get installed inside a project, per host tool.
+//! Where items get installed inside a project, per host tool.
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::{Error, Result};
+use crate::model::ItemKind;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind", content = "path")]
 pub enum Target {
-    /// `.claude/skills` (Claude Code)
+    /// `.claude/skills` and `.claude/agents` (Claude Code)
     ClaudeCode,
     /// `.agents/skills` (Codex, Amp, Copilot CLI and the `skills` CLI convention)
     Agents,
@@ -22,18 +25,27 @@ pub enum Target {
 impl Target {
     pub const ALL: [Target; 4] = [Target::ClaudeCode, Target::Agents, Target::Cursor, Target::Copilot];
 
-    pub fn rel_dir(&self) -> PathBuf {
-        match self {
-            Target::ClaudeCode => PathBuf::from(".claude/skills"),
-            Target::Agents => PathBuf::from(".agents/skills"),
-            Target::Cursor => PathBuf::from(".cursor/skills"),
-            Target::Copilot => PathBuf::from(".github/skills"),
-            Target::Custom(p) => p.clone(),
+    /// Directory (relative to the project root) for items of `kind`, if this host supports them.
+    pub fn rel_dir_for(&self, kind: ItemKind) -> Option<PathBuf> {
+        match (self, kind) {
+            (Target::Custom(p), _) => Some(p.clone()),
+            (Target::ClaudeCode, ItemKind::Skill) => Some(PathBuf::from(".claude/skills")),
+            (Target::ClaudeCode, ItemKind::Agent) => Some(PathBuf::from(".claude/agents")),
+            (Target::Agents, ItemKind::Skill) => Some(PathBuf::from(".agents/skills")),
+            (Target::Cursor, ItemKind::Skill) => Some(PathBuf::from(".cursor/skills")),
+            (Target::Copilot, ItemKind::Skill) => Some(PathBuf::from(".github/skills")),
+            (_, ItemKind::Agent) => None,
         }
     }
 
-    pub fn dir(&self, project_root: &Path) -> PathBuf {
-        project_root.join(self.rel_dir())
+    pub fn dir_for(&self, kind: ItemKind, project_root: &Path) -> Result<PathBuf> {
+        self.rel_dir_for(kind)
+            .map(|rel| project_root.join(rel))
+            .ok_or_else(|| Error::Unsupported(format!("{} does not support {}s", self.label(), kind.label())))
+    }
+
+    pub fn supports(&self, kind: ItemKind) -> bool {
+        self.rel_dir_for(kind).is_some()
     }
 
     pub fn label(&self) -> String {
@@ -63,9 +75,9 @@ impl Target {
     pub fn parse(s: &str) -> Target {
         match s.to_ascii_lowercase().as_str() {
             "claude" | "claude-code" | "claudecode" => Target::ClaudeCode,
+            "agents" | "codex" | "amp" | "copilot-cli" => Target::Agents,
             "cursor" => Target::Cursor,
             "copilot" | "github" | "github-copilot" => Target::Copilot,
-            "agents" | "codex" | "amp" | "copilot-cli" => Target::Agents,
             other => Target::Custom(PathBuf::from(other)),
         }
     }

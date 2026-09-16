@@ -1,6 +1,7 @@
 # Uber Skill
 
-Gestionnaire de bibliothèque de skills pour agents (dossiers contenant un `SKILL.md`).
+Gestionnaire de bibliothèque de skills (dossiers contenant un `SKILL.md`) et d'agents
+(fichiers `<nom>.md` au format sous-agent Claude Code).
 Le disque est la source de vérité : une bibliothèque est un simple dossier, les tags et la
 catégorie vivent dans le frontmatter sous `metadata`, et l'app ne fait qu'indexer.
 
@@ -12,7 +13,9 @@ apps/desktop     app Tauri v2 + SvelteKit
 
 ## Concepts
 
-- **Bibliothèque** : un dossier ; chaque sous-dossier avec un `SKILL.md` est un skill (imbrication autorisée, symlinks suivis).
+- **Bibliothèque** : un dossier racine avec `skills/` et `agents/` (à défaut, les skills sont cherchés à la racine et les agents dans `_AGENTS`).
+- **Skills** : chaque sous-dossier de `skills/` avec un `SKILL.md` (imbrication autorisée, symlinks suivis, dossiers `_xxx` ignorés).
+- **Agents** : chaque fichier `.md` avec frontmatter dans `agents/` (ou le dossier configuré avec `config set-agents`). Ils s'installent dans `.claude/agents/<nom>.md` (cible Claude Code uniquement) avec la même mécanique de verrou et de dérive.
 - **Installer** : copie le skill dans le projet (`.claude/skills`, `.agents/skills`, `.cursor/skills`, `.github/skills` ou un dossier custom) et écrit un verrou `.uber-skill.lock.json` avec la source et le hash du contenu.
 - **Dérive** : à partir du verrou, chaque skill installé est `up-to-date`, `library-updated`, `project-modified`, `conflict`, `untracked`, `missing` ou `source-missing`. On peut voir le diff, tirer la version bibliothèque (`pull`) ou remonter la version projet (`push`).
 - **Harnais** : un skill est universel par défaut. S'il dépend d'un outil (frontmatter `allowed-tools`, outils MCP, sous-agents…), on le déclare dans `metadata.hosts` (`claude-code`, `codex`, `cursor`, `copilot`). L'app filtre dessus et avertit à l'installation si la cible ne correspond pas.
@@ -46,6 +49,11 @@ cargo build -p uber-skill-cli
 ./target/debug/uber-skill status -p ~/mon/projet
 ./target/debug/uber-skill diff review-pr -p ~/mon/projet
 ./target/debug/uber-skill sync review-pr push -p ~/mon/projet
+
+# Agents : mêmes commandes avec --kind agent (ou -k agent)
+./target/debug/uber-skill -k agent list
+./target/debug/uber-skill -k agent install coder reviewer -p ~/mon/projet
+./target/debug/uber-skill -k agent status -p ~/mon/projet
 ```
 
 `--json` sur toutes les commandes de lecture. `--library <dir>` ou `UBER_SKILL_LIBRARY` remplace la config.
@@ -59,7 +67,9 @@ pnpm install
 pnpm tauri dev
 ```
 
-Colonnes : filtres (catégories, tags) · liste avec recherche et cases à cocher · détail (aperçu markdown, éditeur ⌘S, fichiers, lint, tags & catégorie) · projet (choix du dossier et de la cible, installation des skills cochés, état de dérive, diff, pull/push, retirer).
+Barre du haut : bascule Skills / Agents, sélecteur de projet et de cible, bouton « Installés » avec badge de dérive, réglages.
+Colonnes : filtres (catégories, tags, harnais) · liste avec recherche et cases à cocher · détail (aperçu markdown, éditeur ⌘S, fichiers, lint, tags & catégorie).
+Barre flottante quand des éléments sont cochés : installation dans le projet courant. Tiroir « Installés » : état de dérive, diff, pull/push, retirer.
 
 ## Tests
 

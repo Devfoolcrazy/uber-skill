@@ -1,4 +1,14 @@
-import { api, hostKind, type Config, type InstalledSkill, type LibraryView, type Skill, type Target } from "./api";
+import {
+  api,
+  hostKind,
+  targetSupports,
+  type Config,
+  type InstalledSkill,
+  type ItemKind,
+  type LibraryView,
+  type Skill,
+  type Target,
+} from "./api";
 
 export const DRIFT_LABEL: Record<string, string> = {
   "up-to-date": "À jour",
@@ -12,7 +22,8 @@ export const DRIFT_LABEL: Record<string, string> = {
 
 class AppStore {
   config = $state<Config | null>(null);
-  library = $state<LibraryView | null>(null);
+  kind = $state<ItemKind>("skill");
+  libraries = $state<Record<ItemKind, LibraryView | null>>({ skill: null, agent: null });
   loading = $state(false);
   error = $state<string | null>(null);
   toast = $state<string | null>(null);
@@ -27,10 +38,15 @@ class AppStore {
 
   projectPath = $state<string | null>(null);
   target = $state<Target>({ kind: "claude-code" });
-  projectStatus = $state<InstalledSkill[]>([]);
-  showProject = $state(true);
+  projectStatus = $state<Record<ItemKind, InstalledSkill[]>>({ skill: [], agent: [] });
+  drawerOpen = $state(false);
+  pickerOpen = $state(false);
 
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+  get library(): LibraryView | null {
+    return this.libraries[this.kind];
+  }
 
   get skills(): Skill[] {
     return this.library?.skills ?? [];
@@ -38,6 +54,15 @@ class AppStore {
 
   get selected(): Skill | null {
     return this.skills.find((s) => s.id === this.selectedId) ?? null;
+  }
+
+  get status(): InstalledSkill[] {
+    return this.projectStatus[this.kind];
+  }
+
+  /// Whether the current target can host items of the current kind.
+  get targetOk(): boolean {
+    return targetSupports(this.kind, this.target);
   }
 
   get filtered(): Skill[] {
@@ -71,8 +96,24 @@ class AppStore {
     return scored.map(([, s]) => s);
   }
 
+  get driftCount(): number {
+    return this.status.filter((s) => s.state !== "up-to-date").length;
+  }
+
+  /// Drift across both kinds, for the top bar badge.
+  get totalDrift(): number {
+    return (["skill", "agent"] as ItemKind[]).reduce(
+      (n, k) => n + this.projectStatus[k].filter((s) => s.state !== "up-to-date").length,
+      0,
+    );
+  }
+
+  get projectName(): string | null {
+    return this.projectPath ? this.projectPath.split("/").filter(Boolean).pop() ?? this.projectPath : null;
+  }
+
   statusOf(id: string): InstalledSkill | undefined {
-    return this.projectStatus.find((s) => s.id === id);
+    return this.status.find((s) => s.id === id);
   }
 
   notify(msg: string) {
@@ -104,7 +145,10 @@ class AppStore {
   async init() {
     await this.run(null, async () => {
       this.config = await api.getConfig();
-      if (this.config.library_path) await this.refreshLibrary();
+      if (this.config.library_path) {
+        await this.refreshLibrary("skill");
+        await this.refreshLibrary("agent").catch(this.fail.bind(this));
+      }
       const recent = this.config.recent_projects[0];
       if (recent && (await api.pathExists(recent.path))) {
         this.projectPath = recent.path;
@@ -114,9 +158,23 @@ class AppStore {
     });
   }
 
-  async refreshLibrary(keepSelection = true) {
-    const lib = await api.scanLibrary();
-    this.library = lib;
+  async setKind(kind: ItemKind) {
+    if (kind === this.kind) return;
+    this.kind = kind;
+    this.selectedId = null;
+    this.checked = new Set();
+    this.selectedTags = [];
+    this.category = null;
+    this.host = null;
+    if (!this.libraries[kind] && this.config?.library_path) {
+      await this.run(null, () => this.refreshLibrary(kind));
+    }
+  }
+
+  async refreshLibrary(kind: ItemKind = this.kind, keepSelection = true) {
+    const lib = await api.scanLibrary(kind);
+    this.libraries[kind] = lib;
+    if (kind !== this.kind) return;
     if (!keepSelection || !lib.skills.some((s) => s.id === this.selectedId)) {
       this.selectedId = null;
     }
@@ -131,17 +189,31 @@ class AppStore {
   async setLibrary(path: string) {
     await this.run("Bibliothèque chargée", async () => {
       this.config = await api.setLibrary(path);
-      await this.refreshLibrary(false);
+      await this.refreshLibrary("skill", false);
+      this.libraries.agent = null;
+      await this.refreshLibrary("agent").catch(this.fail.bind(this));
+      await this.refreshProject();
+    });
+  }
+
+  async setAgentsLibrary(path: string | null) {
+    await this.run(path ? "Bibliothèque d'agents chargée" : "Dossier d'agents par défaut", async () => {
+      this.config = await api.setAgentsLibrary(path);
+      await this.refreshLibrary("agent", false);
       await this.refreshProject();
     });
   }
 
   async refreshProject() {
     if (!this.projectPath) {
-      this.projectStatus = [];
+      this.projectStatus = { skill: [], agent: [] };
       return;
     }
-    this.projectStatus = await api.projectStatus(this.projectPath, this.target);
+    const [skill, agent] = await Promise.all([
+      api.projectStatus("skill", this.projectPath, this.target),
+      api.projectStatus("agent", this.projectPath, this.target),
+    ]);
+    this.projectStatus = { skill, agent };
   }
 
   async setProject(path: string | null, target?: Target) {
@@ -154,14 +226,15 @@ class AppStore {
   }
 
   replaceSkill(skill: Skill) {
-    if (!this.library) return;
-    const i = this.library.skills.findIndex((s) => s.id === skill.id);
-    if (i >= 0) this.library.skills[i] = skill;
-    else this.library.skills.push(skill);
-    const tags = new Set(this.library.skills.flatMap((s) => s.tags));
-    const cats = new Set(this.library.skills.map((s) => s.category).filter((c): c is string => !!c));
-    this.library.tags = [...tags].sort();
-    this.library.categories = [...cats].sort();
+    const lib = this.libraries[skill.kind];
+    if (!lib) return;
+    const i = lib.skills.findIndex((s) => s.id === skill.id);
+    if (i >= 0) lib.skills[i] = skill;
+    else lib.skills.push(skill);
+    const tags = new Set(lib.skills.flatMap((s) => s.tags));
+    const cats = new Set(lib.skills.map((s) => s.category).filter((c): c is string => !!c));
+    lib.tags = [...tags].sort();
+    lib.categories = [...cats].sort();
   }
 
   toggleChecked(id: string) {

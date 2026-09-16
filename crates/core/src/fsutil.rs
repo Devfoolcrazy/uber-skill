@@ -60,6 +60,38 @@ pub fn hash_dir(root: &Path) -> Result<String> {
     Ok(hex::encode(hasher.finalize()))
 }
 
+/// Content hash of a file or a directory. A file hashes as if it were a directory
+/// containing only itself, so the result is stable across copies with the same name.
+pub fn hash_path(path: &Path) -> Result<String> {
+    if path.is_dir() {
+        return hash_dir(path);
+    }
+    let bytes = std::fs::read(path).map_err(|e| Error::io(path, e))?;
+    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let mut hasher = Sha256::new();
+    hasher.update(name.as_bytes());
+    hasher.update([0u8]);
+    hasher.update((bytes.len() as u64).to_le_bytes());
+    hasher.update(&bytes);
+    hasher.update([0u8]);
+    Ok(hex::encode(hasher.finalize()))
+}
+
+/// Copy a file or a directory item to `dst` (replacing whatever is there).
+pub fn copy_item(src: &Path, dst: &Path) -> Result<()> {
+    if src.is_dir() {
+        return copy_dir(src, dst);
+    }
+    if dst.is_dir() {
+        std::fs::remove_dir_all(dst).map_err(|e| Error::io(dst, e))?;
+    }
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
+    }
+    std::fs::copy(src, dst).map_err(|e| Error::io(src, e))?;
+    Ok(())
+}
+
 /// Copy a skill directory, skipping ignored entries. `dst` is created (and emptied first).
 pub fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
     if dst.exists() {

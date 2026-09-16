@@ -17,6 +17,6 @@ pub use error::{Error, Result};
 pub use install::{DriftState, FileDiff, InstalledSkill, LockEntry, LockFile};
 pub use library::Library;
 pub use lint::{Issue, Severity};
-pub use model::{ScanResult, ScanWarning, Skill};
+pub use model::{ItemKind, ScanResult, ScanWarning, Skill};
 pub use search::Query;
 pub use targets::Target;

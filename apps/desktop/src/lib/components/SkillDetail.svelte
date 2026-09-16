@@ -1,7 +1,7 @@
 <script lang="ts">
   import { marked } from "marked";
   import { api, splitFrontmatter, type Issue, type Skill } from "$lib/api";
-  import { store } from "$lib/store.svelte";
+  import { store, DRIFT_LABEL } from "$lib/store.svelte";
 
   type Tab = "preview" | "edit" | "files" | "lint";
   let tab = $state<Tab>("preview");
@@ -23,11 +23,27 @@
 
   let issues = $state<Issue[] | null>(null);
   let confirmDelete = $state(false);
+  const installed = $derived(skill ? store.statusOf(skill.id) : undefined);
 
+  async function installHere() {
+    if (!skill || !store.projectPath) return;
+    const id = skill.id;
+    const warnings = await api.checkHosts(store.kind, [id], store.target).catch(() => [] as string[]);
+    if (warnings.length > 0) {
+      const { confirm } = await import("@tauri-apps/plugin-dialog");
+      const ok = await confirm(`${warnings.join("\n")}\n\nInstaller quand même ?`, { title: "Harnais incompatible", kind: "warning" });
+      if (!ok) return;
+    }
+    await store.run(`${id} installé dans ${store.projectName}`, () => api.installSkills(store.kind, [id], store.projectPath!, store.target));
+    await store.refreshProject().catch(store.fail);
+  }
+
+  const mainFile = (s: Skill) => (s.kind === "skill" ? "SKILL.md" : s.files[0]);
+  const isMain = $derived(skill ? currentFile === mainFile(skill) : false);
   const isText = (f: string) => /\.(md|txt|json|ya?ml|toml|py|sh|js|ts|rs|csv|html|css|xml|mjs|cjs|svelte|sql)$/i.test(f) || !f.includes(".");
 
   async function load(s: Skill, file: string) {
-    const t = await api.readSkillFile(s.id, file).catch((e) => {
+    const t = await api.readSkillFile(store.kind, s.id, file).catch((e) => {
       store.fail(e);
       return "";
     });
@@ -44,25 +60,25 @@
       issues = null;
       confirmDelete = false;
       metaOpen = false;
-      load(s, "SKILL.md");
+      load(s, mainFile(s));
     }
   });
 
   $effect(() => {
     if (tab === "lint" && skill && issues === null) {
-      api.lintSkill(skill.id).then((r) => (issues = r)).catch(store.fail);
+      api.lintSkill(store.kind, skill.id).then((r) => (issues = r)).catch(store.fail);
     }
   });
 
   const preview = $derived.by(() => {
-    if (!skill || currentFile !== "SKILL.md") return "";
+    if (!skill || !isMain) return "";
     const { body } = splitFrontmatter(text);
     return marked.parse(body, { async: false }) as string;
   });
 
   async function save() {
     if (!skill || !dirty) return;
-    const s = await store.run("Enregistré", () => api.writeSkillFile(skill!.id, currentFile, text));
+    const s = await store.run("Enregistré", () => api.writeSkillFile(store.kind, skill!.id, currentFile, text));
     if (s) {
       original = text;
       store.replaceSkill(s);
@@ -83,7 +99,7 @@
   async function saveMeta() {
     if (!skill) return;
     const s = await store.run("Métadonnées enregistrées", () =>
-      api.updateMeta(skill!.id, {
+      api.updateMeta(store.kind, skill!.id, {
         tags: tagsDraft.split(",").map((t) => t.trim()).filter(Boolean),
         category: categoryDraft.trim() || null,
         set_category: true,
@@ -94,7 +110,7 @@
     if (s) {
       store.replaceSkill(s);
       metaOpen = false;
-      if (currentFile === "SKILL.md") await load(s, "SKILL.md");
+      if (isMain) await load(s, mainFile(s));
       issues = null;
     }
   }
@@ -102,7 +118,7 @@
   async function remove() {
     if (!skill) return;
     const id = skill.id;
-    const ok = await store.run(`Skill ${id} supprimé`, () => api.deleteSkill(id));
+    const ok = await store.run(`Skill ${id} supprimé`, () => api.deleteSkill(store.kind, id));
     if (ok !== undefined) {
       store.selectedId = null;
       await store.refreshLibrary();
@@ -121,7 +137,7 @@
 
 {#if !skill}
   <div class="detail empty muted">
-    {#if store.library}Sélectionne un skill dans la liste.{:else}Choisis d'abord un dossier de bibliothèque.{/if}
+    {#if store.library}Sélectionne un {store.kind === "skill" ? "skill" : "agent"} dans la liste.{:else}Choisis d'abord un dossier de bibliothèque.{/if}
   </div>
 {:else}
   <div class="detail">
@@ -130,6 +146,15 @@
         <h2 class="selectable">{skill.id}</h2>
         {#if skill.category}<span class="chip cat">{skill.category}</span>{/if}
         <span class="spacer"></span>
+        {#if store.projectPath}
+          {#if !installed}
+            <button class="small primary" disabled={!store.targetOk} title={store.targetOk ? "" : "Cette cible ne gère pas les agents"} onclick={installHere}>Installer dans {store.projectName}</button>
+          {:else}
+            <button class="small" onclick={() => (store.drawerOpen = true)} title="Voir dans les installés">
+              <span class="dot {installed.state}"></span> {DRIFT_LABEL[installed.state]}
+            </button>
+          {/if}
+        {/if}
         <button class="small" onclick={() => api.openInEditor(skill!.path).catch(store.fail)}>Ouvrir dans l'éditeur</button>
         <button class="small" onclick={openMeta}>Tags & catégorie</button>
         {#if !confirmDelete}
@@ -169,7 +194,9 @@
       <nav class="tabs">
         <button class:active={tab === "preview"} onclick={() => (tab = "preview")}>Aperçu</button>
         <button class:active={tab === "edit"} onclick={() => (tab = "edit")}>Éditer {dirty ? "•" : ""}</button>
-        <button class:active={tab === "files"} onclick={() => (tab = "files")}>Fichiers ({skill.files.length})</button>
+        {#if skill.kind === "skill"}
+          <button class:active={tab === "files"} onclick={() => (tab = "files")}>Fichiers ({skill.files.length})</button>
+        {/if}
         <button class:active={tab === "lint"} onclick={() => (tab = "lint")}>Lint</button>
         <span class="spacer"></span>
         {#if tab === "edit"}
@@ -181,7 +208,7 @@
 
     <div class="body">
       {#if tab === "preview"}
-        {#if currentFile !== "SKILL.md"}
+        {#if !isMain}
           <pre class="file">{text}</pre>
         {:else}
           <article class="md selectable">{@html preview}</article>
@@ -212,7 +239,7 @@
             {/each}
           </ul>
         {/if}
-        <button class="small" style="margin-top:8px" onclick={() => { issues = null; api.lintSkill(skill!.id).then((r) => (issues = r)).catch(store.fail); }}>Relancer</button>
+        <button class="small" style="margin-top:8px" onclick={() => { issues = null; api.lintSkill(store.kind, skill!.id).then((r) => (issues = r)).catch(store.fail); }}>Relancer</button>
       {/if}
     </div>
   </div>

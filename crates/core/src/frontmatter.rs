@@ -218,6 +218,17 @@ impl SkillDoc {
         self.front.insert(key(k), Value::String(v.to_string()));
     }
 
+    /// Build a fresh document for a new agent (Claude Code subagent format).
+    pub fn new_agent(name: &str, description: &str) -> SkillDoc {
+        let mut front = Mapping::new();
+        front.insert(key("name"), Value::String(name.to_string()));
+        front.insert(key("description"), Value::String(description.to_string()));
+        SkillDoc {
+            front,
+            body: format!("\nTu es {name}.\n\n## Périmètre\n\n## Méthode\n"),
+        }
+    }
+
     /// Build a fresh document for a new skill.
     pub fn new_skill(name: &str, description: &str) -> SkillDoc {
         let mut front = Mapping::new();

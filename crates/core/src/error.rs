@@ -18,6 +18,8 @@ pub enum Error {
     InvalidId(String),
     #[error("library path is not configured")]
     NoLibrary,
+    #[error("unsupported: {0}")]
+    Unsupported(String),
     #[error("not a directory: {0}")]
     NotADirectory(PathBuf),
     #[error("json error: {0}")]

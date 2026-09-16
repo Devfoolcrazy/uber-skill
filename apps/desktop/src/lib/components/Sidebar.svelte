@@ -1,14 +1,17 @@
 <script lang="ts">
   import { open } from "@tauri-apps/plugin-dialog";
   import { store } from "$lib/store.svelte";
-  import { hostKind } from "$lib/api";
-
-  let editorDraft = $state("");
-  let showSettings = $state(false);
+  import { hostKind, KIND_LABEL } from "$lib/api";
 
   async function pickLibrary() {
-    const dir = await open({ directory: true, multiple: false, title: "Choisir le dossier de la bibliothèque" });
-    if (typeof dir === "string") await store.setLibrary(dir);
+    const dir = await open({
+      directory: true,
+      multiple: false,
+      title: store.kind === "skill" ? "Choisir le dossier de la bibliothèque" : "Choisir le dossier des agents",
+    });
+    if (typeof dir !== "string") return;
+    if (store.kind === "skill") await store.setLibrary(dir);
+    else await store.setAgentsLibrary(dir);
   }
 
   function toggleTag(t: string) {
@@ -40,44 +43,27 @@
     return { tags, cats, hosts, uncategorized, agnostic };
   });
 
-  async function saveEditor() {
-    await store.run("Éditeur enregistré", async () => {
-      store.config = await (await import("$lib/api")).api.setEditor(editorDraft || null);
-    });
-  }
 </script>
 
 <aside class="sidebar">
-  <div class="brand row">
-    <h1>Uber Skill</h1>
-    <span class="spacer"></span>
-    <button class="small" title="Réglages" onclick={() => { showSettings = !showSettings; editorDraft = store.config?.editor_command ?? ""; }}>⚙</button>
-  </div>
-
   <section>
-    <h3>Bibliothèque</h3>
+    <h3>{store.kind === "skill" ? "Bibliothèque" : "Agents"}</h3>
     {#if store.library}
       <div class="path selectable" title={store.library.root}>{store.library.root}</div>
-      <div class="muted">{store.skills.length} skill{store.skills.length > 1 ? "s" : ""}</div>
-    {:else}
+      <div class="muted">{store.skills.length} {store.skills.length > 1 ? KIND_LABEL[store.kind].many : KIND_LABEL[store.kind].one}</div>
+    {:else if store.kind === "skill"}
       <div class="muted">Aucune bibliothèque configurée.</div>
+    {:else}
+      <div class="muted">Dossier d'agents introuvable. Par défaut : <code>agents/</code> dans la bibliothèque.</div>
     {/if}
     <div class="row" style="margin-top:6px">
       <button class="small" onclick={pickLibrary}>Choisir…</button>
-      <button class="small" disabled={!store.library} onclick={() => store.run("Bibliothèque rechargée", () => store.refreshLibrary())}>Recharger</button>
+      {#if store.kind === "agent" && store.config?.agents_path}
+        <button class="small" title="Revenir à agents/ dans la bibliothèque" onclick={() => store.setAgentsLibrary(null)}>Par défaut</button>
+      {/if}
+      <button class="small" disabled={!store.library} onclick={() => store.run("Rechargé", () => store.refreshLibrary())}>Recharger</button>
     </div>
   </section>
-
-  {#if showSettings}
-    <section class="settings">
-      <h3>Éditeur externe</h3>
-      <input type="text" placeholder="code (par défaut)" bind:value={editorDraft} />
-      <div class="row" style="margin-top:6px">
-        <button class="small" onclick={saveEditor}>Enregistrer</button>
-        <span class="muted">Commande + chemin</span>
-      </div>
-    </section>
-  {/if}
 
   {#if store.library}
     <section>
@@ -171,9 +157,6 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
-  }
-  .brand h1 {
-    font-size: 15px;
   }
   .path {
     font-family: var(--mono);

@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
-use uber_skill_core::{install, lint, search, Config, FileDiff, InstalledSkill, Issue, Library, LockEntry, Query, Skill, Target};
+use uber_skill_core::{install, lint, search, Config, FileDiff, InstalledSkill, Issue, ItemKind, Library, LockEntry, Query, Skill, Target};
 
 struct AppState {
     config: Mutex<Config>,
@@ -17,14 +17,18 @@ fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
-fn open_library(state: &AppState) -> CmdResult<Library> {
+fn open_library(state: &AppState, kind: ItemKind) -> CmdResult<Library> {
     let cfg = state.config.lock().map_err(err)?;
-    let path = cfg.library_path().map_err(err)?;
-    Library::open(path).map_err(err)
+    let path = cfg.path_for(kind).map_err(err)?;
+    if kind == ItemKind::Agent && !path.is_dir() {
+        std::fs::create_dir_all(&path).map_err(err)?;
+    }
+    Library::open_kind(path, kind).map_err(err)
 }
 
 #[derive(Serialize)]
 struct LibraryView {
+    kind: ItemKind,
     root: PathBuf,
     skills: Vec<Skill>,
     warnings: Vec<uber_skill_core::ScanWarning>,
@@ -47,6 +51,17 @@ fn set_library(state: State<AppState>, path: PathBuf) -> CmdResult<Config> {
 }
 
 #[tauri::command]
+fn set_agents_library(state: State<AppState>, path: Option<PathBuf>) -> CmdResult<Config> {
+    if let Some(p) = &path {
+        Library::open_kind(p, ItemKind::Agent).map_err(err)?;
+    }
+    let mut cfg = state.config.lock().map_err(err)?;
+    cfg.agents_path = path.map(|p| p.canonicalize().unwrap_or(p));
+    cfg.save().map_err(err)?;
+    Ok(cfg.clone())
+}
+
+#[tauri::command]
 fn set_editor(state: State<AppState>, command: Option<String>) -> CmdResult<Config> {
     let mut cfg = state.config.lock().map_err(err)?;
     cfg.editor_command = command.filter(|c| !c.trim().is_empty());
@@ -63,33 +78,33 @@ fn remember_project(state: State<AppState>, path: PathBuf, target: Target) -> Cm
 }
 
 #[tauri::command]
-fn scan_library(state: State<AppState>) -> CmdResult<LibraryView> {
-    let lib = open_library(&state)?;
+fn scan_library(state: State<AppState>, kind: ItemKind) -> CmdResult<LibraryView> {
+    let lib = open_library(&state, kind)?;
     let scan = lib.scan().map_err(err)?;
     let (tags, categories) = Library::facets(&scan.skills);
-    Ok(LibraryView { root: lib.root().to_path_buf(), skills: scan.skills, warnings: scan.warnings, tags, categories })
+    Ok(LibraryView { kind, root: lib.root().to_path_buf(), skills: scan.skills, warnings: scan.warnings, tags, categories })
 }
 
 #[tauri::command]
-fn search_skills(state: State<AppState>, query: Query) -> CmdResult<Vec<Skill>> {
-    let lib = open_library(&state)?;
+fn search_skills(state: State<AppState>, kind: ItemKind, query: Query) -> CmdResult<Vec<Skill>> {
+    let lib = open_library(&state, kind)?;
     let scan = lib.scan().map_err(err)?;
     Ok(search::search(&scan.skills, &query).into_iter().cloned().collect())
 }
 
 #[tauri::command]
-fn get_skill(state: State<AppState>, id: String) -> CmdResult<Skill> {
-    open_library(&state)?.get(&id).map_err(err)
+fn get_skill(state: State<AppState>, kind: ItemKind, id: String) -> CmdResult<Skill> {
+    open_library(&state, kind)?.get(&id).map_err(err)
 }
 
 #[tauri::command]
-fn read_skill_file(state: State<AppState>, id: String, rel: String) -> CmdResult<String> {
-    open_library(&state)?.read_file(&id, &rel).map_err(err)
+fn read_skill_file(state: State<AppState>, kind: ItemKind, id: String, rel: String) -> CmdResult<String> {
+    open_library(&state, kind)?.read_file(&id, &rel).map_err(err)
 }
 
 #[tauri::command]
-fn write_skill_file(state: State<AppState>, id: String, rel: String, text: String) -> CmdResult<Skill> {
-    let lib = open_library(&state)?;
+fn write_skill_file(state: State<AppState>, kind: ItemKind, id: String, rel: String, text: String) -> CmdResult<Skill> {
+    let lib = open_library(&state, kind)?;
     lib.write_file(&id, &rel, &text).map_err(err)?;
     lib.get(&id).map_err(err)
 }
@@ -105,22 +120,25 @@ struct MetaPatch {
 }
 
 #[tauri::command]
-fn update_meta(state: State<AppState>, id: String, patch: MetaPatch) -> CmdResult<Skill> {
-    let lib = open_library(&state)?;
+fn update_meta(state: State<AppState>, kind: ItemKind, id: String, patch: MetaPatch) -> CmdResult<Skill> {
+    let lib = open_library(&state, kind)?;
     let category = if patch.set_category { Some(patch.category.as_deref()) } else { None };
     lib.update_meta(&id, patch.tags.as_deref(), category, patch.hosts.as_deref(), patch.description.as_deref()).map_err(err)
 }
 
 #[tauri::command]
-fn create_skill(state: State<AppState>, id: String, description: String, category: Option<String>, tags: Vec<String>, hosts: Vec<String>) -> CmdResult<Skill> {
-    open_library(&state)?.create(&id, &description, category.as_deref(), &tags, &hosts).map_err(err)
+fn create_skill(state: State<AppState>, kind: ItemKind, id: String, description: String, category: Option<String>, tags: Vec<String>, hosts: Vec<String>) -> CmdResult<Skill> {
+    open_library(&state, kind)?.create(&id, &description, category.as_deref(), &tags, &hosts).map_err(err)
 }
 
-/// Warnings for skills whose declared hosts exclude `target` (empty = all fine).
+/// Warnings for items whose declared hosts exclude `target` (empty = all fine).
 #[tauri::command]
-fn check_hosts(state: State<AppState>, ids: Vec<String>, target: Target) -> CmdResult<Vec<String>> {
-    let lib = open_library(&state)?;
+fn check_hosts(state: State<AppState>, kind: ItemKind, ids: Vec<String>, target: Target) -> CmdResult<Vec<String>> {
+    let lib = open_library(&state, kind)?;
     let mut out = Vec::new();
+    if !target.supports(kind) {
+        return Err(format!("{} ne gère pas les {}s", target.label(), kind.label()));
+    }
     for id in ids {
         let skill = lib.get(&id).map_err(err)?;
         if let Some(w) = install::host_mismatch(&skill, &target) {
@@ -131,31 +149,31 @@ fn check_hosts(state: State<AppState>, ids: Vec<String>, target: Target) -> CmdR
 }
 
 #[tauri::command]
-fn delete_skill(state: State<AppState>, id: String) -> CmdResult<()> {
-    open_library(&state)?.delete(&id).map_err(err)
+fn delete_skill(state: State<AppState>, kind: ItemKind, id: String) -> CmdResult<()> {
+    open_library(&state, kind)?.delete(&id).map_err(err)
 }
 
 #[tauri::command]
-fn import_skill(state: State<AppState>, path: PathBuf, new_id: Option<String>) -> CmdResult<Skill> {
-    open_library(&state)?.import(&path, new_id.as_deref()).map_err(err)
+fn import_skill(state: State<AppState>, kind: ItemKind, path: PathBuf, new_id: Option<String>) -> CmdResult<Skill> {
+    open_library(&state, kind)?.import(&path, new_id.as_deref()).map_err(err)
 }
 
 #[tauri::command]
-fn lint_skill(state: State<AppState>, id: String) -> CmdResult<Vec<Issue>> {
-    let lib = open_library(&state)?;
+fn lint_skill(state: State<AppState>, kind: ItemKind, id: String) -> CmdResult<Vec<Issue>> {
+    let lib = open_library(&state, kind)?;
     let skill = lib.get(&id).map_err(err)?;
-    lint::lint_dir(&skill.path).map_err(err)
+    lint::lint_item(&skill.path, skill.kind).map_err(err)
 }
 
 #[tauri::command]
-fn project_status(state: State<AppState>, project: PathBuf, target: Target) -> CmdResult<Vec<InstalledSkill>> {
-    let lib = open_library(&state).ok();
-    install::status(lib.as_ref(), &project, &target).map_err(err)
+fn project_status(state: State<AppState>, kind: ItemKind, project: PathBuf, target: Target) -> CmdResult<Vec<InstalledSkill>> {
+    let lib = open_library(&state, kind).ok();
+    install::status(lib.as_ref(), &project, &target, kind).map_err(err)
 }
 
 #[tauri::command]
-fn install_skills(state: State<AppState>, ids: Vec<String>, project: PathBuf, target: Target) -> CmdResult<Vec<LockEntry>> {
-    let lib = open_library(&state)?;
+fn install_skills(state: State<AppState>, kind: ItemKind, ids: Vec<String>, project: PathBuf, target: Target) -> CmdResult<Vec<LockEntry>> {
+    let lib = open_library(&state, kind)?;
     let mut out = Vec::new();
     for id in ids {
         let skill = lib.get(&id).map_err(err)?;
@@ -165,19 +183,19 @@ fn install_skills(state: State<AppState>, ids: Vec<String>, project: PathBuf, ta
 }
 
 #[tauri::command]
-fn uninstall_skill(id: String, project: PathBuf, target: Target) -> CmdResult<()> {
-    install::uninstall(&id, &project, &target).map_err(err)
+fn uninstall_skill(kind: ItemKind, id: String, project: PathBuf, target: Target) -> CmdResult<()> {
+    install::uninstall(&id, &project, &target, kind).map_err(err)
 }
 
 #[tauri::command]
-fn diff_installed(state: State<AppState>, id: String, project: PathBuf, target: Target) -> CmdResult<Vec<FileDiff>> {
-    let lib = open_library(&state)?;
+fn diff_installed(state: State<AppState>, kind: ItemKind, id: String, project: PathBuf, target: Target) -> CmdResult<Vec<FileDiff>> {
+    let lib = open_library(&state, kind)?;
     install::diff_installed(&lib, &id, &project, &target).map_err(err)
 }
 
 #[tauri::command]
-fn sync_skill(state: State<AppState>, id: String, direction: String, project: PathBuf, target: Target) -> CmdResult<()> {
-    let lib = open_library(&state)?;
+fn sync_skill(state: State<AppState>, kind: ItemKind, id: String, direction: String, project: PathBuf, target: Target) -> CmdResult<()> {
+    let lib = open_library(&state, kind)?;
     match direction.as_str() {
         "pull" => install::sync_to_project(&lib, &id, &project, &target).map(|_| ()).map_err(err),
         "push" => install::sync_to_library(&lib, &id, &project, &target).map(|_| ()).map_err(err),
@@ -186,8 +204,8 @@ fn sync_skill(state: State<AppState>, id: String, direction: String, project: Pa
 }
 
 #[tauri::command]
-fn adopt_skill(state: State<AppState>, id: String, project: PathBuf, target: Target) -> CmdResult<LockEntry> {
-    let lib = open_library(&state)?;
+fn adopt_skill(state: State<AppState>, kind: ItemKind, id: String, project: PathBuf, target: Target) -> CmdResult<LockEntry> {
+    let lib = open_library(&state, kind)?;
     install::adopt(&lib, &id, &project, &target).map_err(err)
 }
 
@@ -234,6 +252,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             set_library,
+            set_agents_library,
             set_editor,
             remember_project,
             scan_library,

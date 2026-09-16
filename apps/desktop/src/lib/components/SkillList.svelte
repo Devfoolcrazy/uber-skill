@@ -13,8 +13,8 @@
 
 <div class="list">
   <div class="toolbar">
-    <input type="search" placeholder="Rechercher (nom, tag, description)…" bind:value={store.query} />
-    <button class="small primary" title="Nouveau skill" onclick={() => (showNew = !showNew)}>+</button>
+    <input type="search" placeholder="Rechercher un {store.kind === 'skill' ? 'skill' : 'agent'} (nom, tag, description)…" bind:value={store.query} />
+    <button class="small primary" title="Nouveau {store.kind === 'skill' ? 'skill' : 'agent'}" onclick={() => (showNew = !showNew)}>+</button>
   </div>
   {#if showNew}
     <NewSkillForm onclose={() => (showNew = false)} />
@@ -51,7 +51,7 @@
     {/each}
   </ul>
   {#if store.library && list.length === 0}
-    <div class="empty muted">Aucun skill ne correspond.</div>
+    <div class="empty muted">Aucun {store.kind === "skill" ? "skill" : "agent"} ne correspond.</div>
   {/if}
 </div>
 

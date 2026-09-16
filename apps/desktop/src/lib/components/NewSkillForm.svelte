@@ -14,7 +14,7 @@
 
   async function create() {
     const s = await store.run(`Skill ${id} créé`, () =>
-      api.createSkill(
+      api.createSkill(store.kind, 
         id,
         description,
         category || null,
@@ -30,9 +30,12 @@
   }
 
   async function importDir() {
-    const dir = await open({ directory: true, multiple: false, title: "Importer un dossier de skill" });
+    const dir =
+      store.kind === "skill"
+        ? await open({ directory: true, multiple: false, title: "Importer un dossier de skill" })
+        : await open({ multiple: false, title: "Importer un fichier d'agent", filters: [{ name: "Markdown", extensions: ["md"] }] });
     if (typeof dir !== "string") return;
-    const s = await store.run("Skill importé", () => api.importSkill(dir, null));
+    const s = await store.run(store.kind === "skill" ? "Skill importé" : "Agent importé", () => api.importSkill(store.kind, dir, null));
     if (s) {
       store.replaceSkill(s);
       store.selectedId = s.id;
@@ -42,7 +45,7 @@
 </script>
 
 <form class="new" onsubmit={(e) => { e.preventDefault(); if (idOk) create(); }}>
-  <input type="text" placeholder="identifiant (ex: review-pr)" bind:value={id} class:bad={id && !idOk} />
+  <input type="text" placeholder={store.kind === "skill" ? "identifiant (ex: review-pr)" : "identifiant (ex: reviewer)"} bind:value={id} class:bad={id && !idOk} />
   <input type="text" placeholder="description" bind:value={description} />
   <div class="row">
     <input type="text" placeholder="catégorie" bind:value={category} list="cats" />
@@ -54,7 +57,7 @@
   </datalist>
   <div class="row">
     <button type="submit" class="small primary" disabled={!idOk}>Créer</button>
-    <button type="button" class="small" onclick={importDir}>Importer un dossier…</button>
+    <button type="button" class="small" onclick={importDir}>{store.kind === "skill" ? "Importer un dossier…" : "Importer un fichier…"}</button>
     <span class="spacer"></span>
     <button type="button" class="small" onclick={onclose}>Annuler</button>
   </div>

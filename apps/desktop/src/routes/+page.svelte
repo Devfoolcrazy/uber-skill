@@ -2,10 +2,12 @@
   import { onMount } from "svelte";
   import "../app.css";
   import { store } from "$lib/store.svelte";
+  import TopBar from "$lib/components/TopBar.svelte";
   import Sidebar from "$lib/components/Sidebar.svelte";
   import SkillList from "$lib/components/SkillList.svelte";
   import SkillDetail from "$lib/components/SkillDetail.svelte";
-  import ProjectPanel from "$lib/components/ProjectPanel.svelte";
+  import ProjectDrawer from "$lib/components/ProjectDrawer.svelte";
+  import SelectionBar from "$lib/components/SelectionBar.svelte";
 
   onMount(() => {
     store.init();
@@ -13,15 +15,16 @@
 </script>
 
 <div class="app">
-  <Sidebar />
-  <SkillList />
-  <SkillDetail />
-  {#if store.showProject}
-    <ProjectPanel />
-  {:else}
-    <button class="show-project" onclick={() => (store.showProject = true)} title="Afficher le panneau projet">Projet ▸</button>
-  {/if}
+  <TopBar />
+  <div class="main">
+    <Sidebar />
+    <SkillList />
+    <SkillDetail />
+  </div>
 </div>
+
+<ProjectDrawer />
+<SelectionBar />
 
 {#if store.error}
   <div class="banner error" role="alert">
@@ -39,19 +42,20 @@
 <style>
   .app {
     display: flex;
+    flex-direction: column;
     height: 100vh;
     overflow: hidden;
   }
-  .show-project {
-    position: fixed;
-    right: 12px;
-    bottom: 12px;
+  .main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
   }
   .banner {
     position: fixed;
     left: 50%;
     transform: translateX(-50%);
-    bottom: 16px;
+    bottom: 72px;
     padding: 8px 14px;
     border-radius: 8px;
     display: flex;
@@ -76,6 +80,7 @@
     height: 2px;
     background: var(--accent);
     animation: pulse 1s infinite alternate;
+    z-index: 30;
   }
   @keyframes pulse {
     from {
