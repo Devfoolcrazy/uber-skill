@@ -1,0 +1,3 @@
+# Xcode's license is not accepted on this machine; link with the Command Line Tools instead.
+[env]
+DEVELOPER_DIR = "/Library/Developer/CommandLineTools"

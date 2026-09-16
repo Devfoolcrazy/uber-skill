@@ -1,0 +1,22 @@
+[package]
+name = "uber-skill-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Core library for managing a library of agent skills"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+walkdir.workspace = true
+sha2.workspace = true
+hex.workspace = true
+similar.workspace = true
+directories.workspace = true
+chrono.workspace = true
+regex.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

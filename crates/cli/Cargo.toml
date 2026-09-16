@@ -1,0 +1,17 @@
+[package]
+name = "uber-skill-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CLI for the uber-skill library"
+
+[[bin]]
+name = "uber-skill"
+path = "src/main.rs"
+
+[dependencies]
+uber-skill-core.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+serde.workspace = true
