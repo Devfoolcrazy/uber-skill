@@ -7,8 +7,8 @@ Avancer étape par étape : chaque livraison doit être testée par l’utilisat
 1. **Ouverture d’une bibliothèque Git locale et clonage depuis une URL : implémentés et validés par l’utilisateur.** Interface « Ouvrir / Cloner… » commune aux skills et agents, validation de la racine Git, destination de clonage nouvelle uniquement, réinitialisation de l’ancien chemin d’agents personnalisé, choix conservé au prochain lancement. Les bibliothèques préexistantes sans Git restent lisibles au démarrage.
 2. **Publication Git : implémentée et validée par l’utilisateur.** Aperçu, sélection par fichier, message prérempli modifiable, commit/push explicite et nouvel essai du push sans commit supplémentaire.
 3. **Récupération Git et vérification de fraîcheur avant installation : implémentées et validées par l’utilisateur.** Fetch de la branche distante configurée, compteur de commits locaux/distants, mise à jour en avance rapide et choix explicite d’une installation locale. Contrôle commun aux installations unitaires, groupées, agents et réinstallations depuis le tiroir.
-4. **Référentiel de tags/catégories et administration : implémentés, en attente du test utilisateur.** Fichier `uber-skill.yaml` versionné à la racine, commun aux skills et agents, tolérant aux valeurs inconnues ; page « Tags et catégories » (ajout, renommage partout, suppression avec remplacement ou retrait explicite, mise en correspondance des valeurs inconnues) ; sélecteurs dans l’éditeur et le formulaire de création ; avertissements de lint ; commandes CLI `registry`.
-5. Création de skills/agents avec templates intégrés : à compléter selon les décisions ci-dessous.
+4. **Référentiel de tags/catégories et administration : implémentés et validés par l’utilisateur.** Fichier `uber-skill.yaml` versionné à la racine, commun aux skills et agents, tolérant aux valeurs inconnues ; page « Tags et catégories » (ajout, renommage partout, suppression avec remplacement ou retrait explicite, mise en correspondance des valeurs inconnues) ; sélecteurs dans l’éditeur et le formulaire de création ; avertissements de lint ; commandes CLI `registry`.
+5. **Création de skills/agents avec templates intégrés : implémentée, en attente du test utilisateur.** Modèles distincts dans `crates/core/src/templates/`, refus d’écraser quoi que ce soit, ouverture immédiate du brouillon dans l’éditeur.
 6. Raffinement assisté du `SKILL.md` : à implémenter.
 7. Passe UI/UX : après validation du fonctionnel.
 
@@ -53,6 +53,18 @@ Vérifications effectuées : suite Rust complète réussie (20 tests à ce stade
 - Vérifier que les commits locaux déjà en attente sont annoncés avant envoi et que les modifications non enregistrées dans l’éditeur sont signalées.
 
 Limites de cette étape : destination de suivi Git déjà configurée, conflits et opérations Git complexes traités à l’extérieur, pas de fetch automatique avant publication. Les fichiers sont sélectionnés en entier ; la sélection de fragments de diff n’est pas prévue.
+
+### Test utilisateur de l’étape 5
+
+Vérifications effectuées : suite Rust complète (44 tests, dont un sur les modèles et le refus d’écrasement), `pnpm check` sans erreur ni avertissement, 37 tests d’interface (dont le formulaire de création et l’ouverture en édition). L’interface n’a pas été essayée dans l’application réelle.
+
+- Créer un skill avec « + Nouveau skill » : vérifier les sélecteurs de catégorie et de tags, l’ouverture directe dans l’onglet « Éditer », la structure du modèle (objectif, instructions, exemple d’utilisation) et la notification indiquant que le brouillon n’est pas publié.
+- Faire de même pour un agent et vérifier que le modèle est différent (« Tu es … »).
+- Essayer un nom déjà utilisé, puis le nom d’un dossier existant dans `skills/` qui n’est pas un skill : la création doit être refusée et rien ne doit être modifié.
+- Vérifier que le brouillon apparaît dans « Publier… » comme un ajout, et qu’il peut être installé dans un projet avant publication (« Brouillon local non publié »).
+- Vérifier l’onglet Lint du brouillon : aucun problème bloquant.
+
+Limites de cette étape : les modèles sont intégrés à l’application et en français ; leur personnalisation depuis le dépôt reste une évolution possible.
 
 ## Bibliothèque Git et installation
 

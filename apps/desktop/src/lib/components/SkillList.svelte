@@ -14,7 +14,7 @@
 <div class="list">
   <div class="toolbar">
     <input type="search" placeholder="Rechercher un {store.kind === 'skill' ? 'skill' : 'agent'} (nom, tag, description)…" bind:value={store.query} />
-    <button class="small primary" title="Nouveau {store.kind === 'skill' ? 'skill' : 'agent'}" onclick={() => (showNew = !showNew)}>+</button>
+    <button class="small primary" title="Nouveau {store.kind === 'skill' ? 'skill' : 'agent'}" onclick={() => (showNew = !showNew)}>+ {store.kind === "skill" ? "Nouveau skill" : "Nouvel agent"}</button>
   </div>
   {#if showNew}
     <NewSkillForm onclose={() => (showNew = false)} />

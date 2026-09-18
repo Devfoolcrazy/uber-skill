@@ -32,6 +32,11 @@ pub struct Meta {
     pub hosts: Vec<String>,
 }
 
+/// Bodies of new items: purpose, instructions, usage example. Built in for now;
+/// `{name}` is the only placeholder.
+const SKILL_TEMPLATE: &str = include_str!("templates/skill.md");
+const AGENT_TEMPLATE: &str = include_str!("templates/agent.md");
+
 fn key(s: &str) -> Value {
     Value::String(s.to_string())
 }
@@ -323,7 +328,7 @@ impl SkillDoc {
         front.insert(key("description"), Value::String(description.to_string()));
         SkillDoc {
             front,
-            body: format!("\nTu es {name}.\n\n## Périmètre\n\n## Méthode\n"),
+            body: AGENT_TEMPLATE.replace("{name}", name),
         }
     }
 
@@ -334,7 +339,7 @@ impl SkillDoc {
         front.insert(key("description"), Value::String(description.to_string()));
         SkillDoc {
             front,
-            body: format!("\n# {name}\n\n## Quand utiliser\n\n## Instructions\n"),
+            body: SKILL_TEMPLATE.replace("{name}", name),
         }
     }
 }

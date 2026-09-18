@@ -18,6 +18,7 @@ beforeEach(() => {
   store.gitDialog = null;
   store.toast = null;
   store.registry = null;
+  store.editRequest = null;
 });
 
 describe("project copy after an edit", () => {
@@ -41,5 +42,17 @@ describe("project copy after an edit", () => {
     expect(store.gitDialog).toEqual({
       install: { kind: "skill", ids: ["one"], project: "/work/game", target: { kind: "claude-code" } },
     });
+  });
+});
+
+describe("a just-created draft", () => {
+  it("opens straight in the editor, once", async () => {
+    bridge({ read_skill_file: () => TEXT });
+    store.editRequest = "one";
+    render(SkillDetail);
+
+    const editor = await waitFor(() => screen.getByRole("textbox") as HTMLTextAreaElement);
+    await waitFor(() => expect(editor.value).toBe(TEXT));
+    expect(store.editRequest).toBeNull();
   });
 });

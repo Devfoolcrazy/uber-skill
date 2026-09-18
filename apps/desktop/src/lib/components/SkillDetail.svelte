@@ -62,6 +62,10 @@
       confirmDelete = false;
       metaOpen = false;
       load(s, mainFile(s));
+      if (store.editRequest === s.id) {
+        tab = "edit";
+        store.editRequest = null;
+      }
     }
   });
 

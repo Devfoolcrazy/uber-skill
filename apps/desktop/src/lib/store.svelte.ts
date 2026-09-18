@@ -52,6 +52,8 @@ class AppStore {
   /// Allowed categories and tags of the library, merged with the values in use.
   registry = $state<RegistryView | null>(null);
   registryOpen = $state(false);
+  /// Id of a just-created item that the detail view should open straight in the editor.
+  editRequest = $state<string | null>(null);
 
   async refreshRegistry() {
     this.registry = this.config?.library_path ? await api.getRegistry().catch(() => null) : null;

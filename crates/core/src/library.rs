@@ -283,6 +283,10 @@ impl Library {
             return Err(Error::SkillExists(id.to_string()));
         }
         let path = self.new_item_path(id);
+        // Not an item, yet something is there (a folder without SKILL.md, a note): never overwrite it.
+        if path.symlink_metadata().is_ok() {
+            return Err(Error::SkillExists(id.to_string()));
+        }
         let mut doc = match self.kind {
             ItemKind::Skill => SkillDoc::new_skill(id, description),
             ItemKind::Agent => SkillDoc::new_agent(id, description),
@@ -396,6 +400,9 @@ impl Library {
             return Err(Error::SkillExists(id.to_string()));
         }
         let dst = self.new_item_path(id);
+        if dst.symlink_metadata().is_ok() {
+            return Err(Error::SkillExists(id.to_string()));
+        }
         fsutil::copy_item(src, &dst)?;
         read_item(&dst, Some(&self.root), self.kind)
     }
@@ -428,6 +435,73 @@ mod tests {
     fn write(p: &Path, s: &str) {
         std::fs::create_dir_all(p.parent().unwrap()).unwrap();
         std::fs::write(p, s).unwrap();
+    }
+
+    #[test]
+    fn creates_from_distinct_templates_that_lint_clean_and_never_overwrites() {
+        let tmp = tempfile::tempdir().unwrap();
+        let skills = Library::open(tmp.path()).unwrap();
+        let created = skills
+            .create(
+                "review-pr",
+                "Relit une pull request et signale les risques avant fusion.",
+                Some("review"),
+                &["git".into()],
+                &[],
+            )
+            .unwrap();
+        let text = skills.read_main("review-pr").unwrap();
+        for heading in [
+            "# review-pr",
+            "## Objectif",
+            "## Instructions",
+            "## Exemple d'utilisation",
+        ] {
+            assert!(text.contains(heading), "{heading}");
+        }
+        assert_eq!(
+            (created.category.as_deref(), created.tags),
+            (Some("review"), vec!["git".to_string()])
+        );
+        let issues = crate::lint::lint_item(&created.path, ItemKind::Skill).unwrap();
+        assert!(
+            issues.iter().all(|i| i.severity != crate::lint::Severity::Error),
+            "{issues:?}"
+        );
+
+        let agents_dir = tmp.path().join("agents");
+        std::fs::create_dir(&agents_dir).unwrap();
+        let agents = Library::open_kind(&agents_dir, ItemKind::Agent).unwrap();
+        agents.create("reviewer", "Relit le code.", None, &[], &[]).unwrap();
+        let agent = agents.read_main("reviewer").unwrap();
+        assert!(agent.contains("Tu es reviewer.") && agent.contains("## Exemple d'utilisation"));
+        assert!(!agent.contains("# reviewer"));
+
+        // An existing item, a folder that is not a skill, a file that is not an agent: all refused, all untouched.
+        assert!(matches!(
+            skills.create("review-pr", "again", None, &[], &[]),
+            Err(Error::SkillExists(_))
+        ));
+        assert_eq!(skills.read_main("review-pr").unwrap(), text);
+        write(&tmp.path().join("notes/keep.txt"), "mine");
+        assert!(matches!(
+            skills.create("notes", "x", None, &[], &[]),
+            Err(Error::SkillExists(_))
+        ));
+        assert!(!tmp.path().join("notes/SKILL.md").exists());
+        write(&agents_dir.join("draft.md"), "no frontmatter, my notes");
+        assert!(matches!(
+            agents.create("draft", "x", None, &[], &[]),
+            Err(Error::SkillExists(_))
+        ));
+        assert_eq!(
+            std::fs::read_to_string(agents_dir.join("draft.md")).unwrap(),
+            "no frontmatter, my notes"
+        );
+        assert!(matches!(
+            skills.import(&created.path, Some("notes")),
+            Err(Error::SkillExists(_))
+        ));
     }
 
     #[test]

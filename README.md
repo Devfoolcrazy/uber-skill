@@ -156,6 +156,15 @@ l’application (suivi distant configuré, avance rapide uniquement, aucun push 
 une copie locale sans vérification de fraîcheur : lancer `remote status` avant si nécessaire. Remonter une copie projet vers la bibliothèque reste un enregistrement
 local ; sa publication Git est une action séparée.
 
+### Créer un skill ou un agent
+
+**+ Nouveau skill** (ou **+ Nouvel agent**) demande un identifiant, une description et, facultativement, une
+catégorie et des tags du référentiel. L’élément est créé à partir d’un modèle intégré, distinct pour les
+skills et les agents, à la structure courte : objectif, instructions, exemple d’utilisation. Il s’ouvre
+aussitôt dans l’éditeur. Rien n’est écrasé : un nom déjà pris est refusé, même par un dossier ou un fichier
+qui n’est pas un skill ou un agent. Le brouillon reste local jusqu’à **Publier…**. La commande CLI `new`
+utilise les mêmes modèles.
+
 ### Tags et catégories
 
 **Tags et catégories…** (barre latérale, ou ⚙ › Bibliothèque) administre le référentiel : ajouter une
