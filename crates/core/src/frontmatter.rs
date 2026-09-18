@@ -70,6 +70,81 @@ pub fn normalize_tags<I: IntoIterator<Item = String>>(tags: I) -> Vec<String> {
     out
 }
 
+/// A YAML scalar for `value`, quoted only when YAML requires it.
+fn scalar(value: &str) -> Option<String> {
+    let text = serde_yaml::to_string(&Value::String(value.to_string())).ok()?;
+    let text = text.trim_end_matches('\n');
+    (!text.contains('\n')).then(|| text.to_string())
+}
+
+/// Replace, in place, the single-line `tags`, `category` and `hosts` entries of
+/// the `metadata` block. Returns None whenever the layout is anything else (a
+/// key to add, a list or block value, legacy top-level keys): the caller then
+/// re-serializes and verifies the result either way.
+fn patch_metadata_lines(text: &str, meta: &Meta) -> Option<String> {
+    let wanted: [(&str, Option<String>); 3] = [
+        ("tags", (!meta.tags.is_empty()).then(|| meta.tags.join(", "))),
+        ("category", meta.category.clone()),
+        ("hosts", (!meta.hosts.is_empty()).then(|| meta.hosts.join(", "))),
+    ];
+    let mut lines: Vec<String> = Vec::new();
+    let mut seen = [false; 3];
+    let mut in_front = false;
+    let mut in_metadata = false;
+    let mut done = false;
+    for (n, line) in text.split_inclusive('\n').enumerate() {
+        let bare = line.trim_end_matches(['\r', '\n']);
+        if done {
+            lines.push(line.to_string());
+            continue;
+        }
+        if bare == "---" {
+            done = in_front;
+            in_front = n == 0;
+            lines.push(line.to_string());
+            continue;
+        }
+        let indented = bare.starts_with([' ', '\t']);
+        if !indented && !bare.is_empty() && !bare.starts_with('#') {
+            in_metadata = bare.trim_end() == "metadata:";
+        }
+        let entry = in_metadata.then(|| bare.trim_start()).and_then(|entry| {
+            wanted
+                .iter()
+                .position(|(k, _)| entry.strip_prefix(k).is_some_and(|rest| rest.starts_with(':')))
+        });
+        let Some(i) = entry.filter(|_| indented) else {
+            lines.push(line.to_string());
+            continue;
+        };
+        let (key, value) = &wanted[i];
+        let current = bare.trim_start()[key.len() + 1..].trim();
+        // Only plain one-line values; a comment, list or block scalar needs the full path.
+        if seen[i]
+            || current.is_empty()
+            || current.starts_with(['[', '|', '>', '&', '*', '#'])
+            || current.contains(" #")
+        {
+            return None;
+        }
+        seen[i] = true;
+        if let Some(value) = value {
+            let indent = &bare[..bare.len() - bare.trim_start().len()];
+            let ending = &line[bare.len()..];
+            lines.push(format!("{indent}{key}: {}{ending}", scalar(value)?));
+        }
+    }
+    // A value to write without an existing line to carry it: not patchable.
+    if wanted
+        .iter()
+        .zip(seen)
+        .any(|((_, value), seen)| value.is_some() && !seen)
+    {
+        return None;
+    }
+    Some(lines.concat())
+}
+
 impl SkillDoc {
     /// Parse the text of a `SKILL.md`. `path` is only used for error messages.
     pub fn parse(text: &str, path: &Path) -> Result<SkillDoc> {
@@ -214,6 +289,29 @@ impl SkillDoc {
         }
     }
 
+    /// Text of the document with new tags, category and hosts. Rewrites only the
+    /// matching `metadata` lines when that is enough, so comments, quoting and
+    /// folded scalars elsewhere in the frontmatter survive and Git diffs stay
+    /// small; otherwise falls back to a full re-serialization.
+    pub fn text_with_meta(
+        &self,
+        text: &str,
+        tags: &[String],
+        category: Option<&str>,
+        hosts: &[String],
+    ) -> Result<String> {
+        let mut next = self.clone();
+        next.set_meta(tags, category, hosts);
+        let expected = next.meta();
+        if let Some(patched) = patch_metadata_lines(text, &expected) {
+            let reparsed = SkillDoc::parse(&patched, Path::new("")).ok();
+            if reparsed.is_some_and(|d| d.front == next.front && d.body == next.body) {
+                return Ok(patched);
+            }
+        }
+        next.to_text()
+    }
+
     pub fn set_str(&mut self, k: &str, v: &str) {
         self.front.insert(key(k), Value::String(v.to_string()));
     }
@@ -277,6 +375,50 @@ mod tests {
         assert_eq!(again.meta().category.as_deref(), Some("cat"));
         assert_eq!(again.meta().hosts, vec!["claude-code"]);
         assert_eq!(again.body, "# hi\n");
+    }
+
+    #[test]
+    fn meta_edit_rewrites_only_its_lines_when_possible() {
+        let src = "---\nname: x\n# keep this comment\ndescription: >\n  folded\n  text\nmetadata:\n  author: me\n  tags: git, old\n  category: \"Review\"\n---\n# body\n";
+        let doc = SkillDoc::parse(src, &p()).unwrap();
+        let out = doc
+            .text_with_meta(src, &["git".into(), "new".into()], Some("review: deep"), &[])
+            .unwrap();
+        assert_eq!(
+            out,
+            "---\nname: x\n# keep this comment\ndescription: >\n  folded\n  text\nmetadata:\n  author: me\n  tags: git, new\n  category: 'review: deep'\n---\n# body\n"
+        );
+        // Removing a value drops its line and nothing else.
+        let doc = SkillDoc::parse(&out, &p()).unwrap();
+        let cleared = doc.text_with_meta(&out, &["git".into()], None, &[]).unwrap();
+        assert!(
+            cleared.contains("# keep this comment")
+                && cleared.contains("  tags: git\n")
+                && !cleared.contains("category")
+        );
+    }
+
+    #[test]
+    fn meta_edit_falls_back_to_serialization_and_stays_correct() {
+        for src in [
+            "---\nname: x\ndescription: d\n---\nbody\n",
+            "---\nname: x\ndescription: d\ntags: [a, b]\n---\nbody\n",
+            "---\nname: x\ndescription: d\nmetadata:\n  tags:\n    - a\n    - b\n---\nbody\n",
+            "---\nname: x\ndescription: d\nmetadata:\n  tags: a # note\n---\nbody\n",
+            "---\nname: x\ndescription: d\nmetadata:\n  tags: a\n---\nbody\n",
+        ] {
+            let doc = SkillDoc::parse(src, &p()).unwrap();
+            let out = doc
+                .text_with_meta(src, &["b".into(), "c".into()], Some("cat"), &["codex".into()])
+                .unwrap();
+            let meta = SkillDoc::parse(&out, &p()).unwrap().meta();
+            assert_eq!(
+                (meta.tags, meta.category.as_deref(), meta.hosts),
+                (vec!["b".into(), "c".into()], Some("cat"), vec!["codex".to_string()]),
+                "{src}"
+            );
+            assert!(out.ends_with("---\nbody\n"));
+        }
     }
 
     #[test]

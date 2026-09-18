@@ -365,11 +365,16 @@ impl Library {
             Some(h) => normalize_tags(h.iter().cloned()),
             None => current.hosts.clone(),
         };
-        doc.set_meta(&tags, category.as_deref(), &hosts);
-        if let Some(d) = description {
-            doc.set_str("description", d);
-        }
-        fsutil::write_string(&md, &doc.to_text()?)?;
+        let next = match description {
+            // A new description re-serializes the frontmatter anyway.
+            Some(d) => {
+                doc.set_meta(&tags, category.as_deref(), &hosts);
+                doc.set_str("description", d);
+                doc.to_text()?
+            }
+            None => doc.text_with_meta(&text, &tags, category.as_deref(), &hosts)?,
+        };
+        fsutil::write_string(&md, &next)?;
         read_item(&path, Some(&self.root), self.kind)
     }
 
