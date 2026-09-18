@@ -8,7 +8,7 @@ Avancer étape par étape : chaque livraison doit être testée par l’utilisat
 2. **Publication Git : implémentée et validée par l’utilisateur.** Aperçu, sélection par fichier, message prérempli modifiable, commit/push explicite et nouvel essai du push sans commit supplémentaire.
 3. **Récupération Git et vérification de fraîcheur avant installation : implémentées et validées par l’utilisateur.** Fetch de la branche distante configurée, compteur de commits locaux/distants, mise à jour en avance rapide et choix explicite d’une installation locale. Contrôle commun aux installations unitaires, groupées, agents et réinstallations depuis le tiroir.
 4. **Référentiel de tags/catégories et administration : implémentés et validés par l’utilisateur.** Fichier `uber-skill.yaml` versionné à la racine, commun aux skills et agents, tolérant aux valeurs inconnues ; page « Tags et catégories » (ajout, renommage partout, suppression avec remplacement ou retrait explicite, mise en correspondance des valeurs inconnues) ; sélecteurs dans l’éditeur et le formulaire de création ; avertissements de lint ; commandes CLI `registry`.
-5. **Création de skills/agents avec templates intégrés : implémentée, en attente du test utilisateur.** Modèles distincts dans `crates/core/src/templates/`, refus d’écraser quoi que ce soit, ouverture immédiate du brouillon dans l’éditeur.
+5. **Création de skills/agents avec templates intégrés : implémentée et validée par l’utilisateur.** Modèles distincts dans `crates/core/src/templates/`, refus d’écraser quoi que ce soit, ouverture immédiate du brouillon dans l’éditeur.
 6. Raffinement assisté du `SKILL.md` : à implémenter.
 7. Passe UI/UX : après validation du fonctionnel.
 
