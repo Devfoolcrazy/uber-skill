@@ -123,6 +123,7 @@ export interface Issue {
 export const api = {
   getConfig: () => invoke<Config>("get_config"),
   setLibrary: (path: string) => invoke<Config>("set_library", { path }),
+  cloneLibrary: (url: string, parent: string, name: string) => invoke<Config>("clone_library", { url, parent, name }),
   setAgentsLibrary: (path: string | null) => invoke<Config>("set_agents_library", { path }),
   setEditor: (command: string | null) => invoke<Config>("set_editor", { command }),
   rememberProject: (path: string, target: Target) => invoke<Config>("remember_project", { path, target }),

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import { marked } from "marked";
   import { api, splitFrontmatter, type Issue, type Skill } from "$lib/api";
   import { store, DRIFT_LABEL } from "$lib/store.svelte";
@@ -14,12 +15,19 @@
   let loadedFor = $state<string | null>(null);
   const dirty = $derived(text !== original);
 
+  onDestroy(() => { store.editorDirty = false; });
+
   // Metadata editing
   let tagsDraft = $state("");
   let categoryDraft = $state("");
   let descDraft = $state("");
   let hostsDraft = $state("");
   let metaOpen = $state(false);
+  const metaDirty = $derived(metaOpen && !!skill && (
+    tagsDraft !== skill.tags.join(", ") || categoryDraft !== (skill.category ?? "") ||
+    descDraft !== skill.description || hostsDraft !== skill.hosts.join(", ")
+  ));
+  $effect(() => { store.editorDirty = dirty || metaDirty; });
 
   let issues = $state<Issue[] | null>(null);
   let confirmDelete = $state(false);

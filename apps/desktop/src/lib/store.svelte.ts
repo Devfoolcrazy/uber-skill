@@ -41,6 +41,9 @@ class AppStore {
   projectStatus = $state<Record<ItemKind, InstalledSkill[]>>({ skill: [], agent: [] });
   drawerOpen = $state(false);
   pickerOpen = $state(false);
+  libraryBusy = $state(false);
+  libraryGeneration = $state(0);
+  editorDirty = $state(false);
 
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -186,14 +189,38 @@ class AppStore {
     this.checked = new Set([...this.checked].filter((id) => lib.skills.some((s) => s.id === id)));
   }
 
+  async openLibrary(load: () => Promise<Config>): Promise<boolean> {
+    if (this.libraryBusy) return false;
+    this.libraryBusy = true;
+    try {
+      const result = await this.run("Bibliothèque chargée", async () => {
+        const config = await load();
+        this.config = config;
+        this.libraryGeneration++;
+        this.libraries = { skill: null, agent: null };
+        this.selectedId = null;
+        this.checked = new Set();
+        this.selectedTags = [];
+        this.category = null;
+        this.host = null;
+        this.query = "";
+        await this.refreshLibrary("skill", false);
+        await this.refreshLibrary("agent", false);
+        await this.refreshProject();
+        return true;
+      });
+      return result === true;
+    } finally {
+      this.libraryBusy = false;
+    }
+  }
+
   async setLibrary(path: string) {
-    await this.run("Bibliothèque chargée", async () => {
-      this.config = await api.setLibrary(path);
-      await this.refreshLibrary("skill", false);
-      this.libraries.agent = null;
-      await this.refreshLibrary("agent").catch(this.fail.bind(this));
-      await this.refreshProject();
-    });
+    return this.openLibrary(() => api.setLibrary(path));
+  }
+
+  async cloneLibrary(url: string, parent: string, name: string) {
+    return this.openLibrary(() => api.cloneLibrary(url, parent, name));
   }
 
   async setAgentsLibrary(path: string | null) {

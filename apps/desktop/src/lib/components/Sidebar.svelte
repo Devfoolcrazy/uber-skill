@@ -1,18 +1,9 @@
 <script lang="ts">
-  import { open } from "@tauri-apps/plugin-dialog";
   import { store } from "$lib/store.svelte";
   import { hostKind, KIND_LABEL } from "$lib/api";
+  import LibraryChooser from "./LibraryChooser.svelte";
 
-  async function pickLibrary() {
-    const dir = await open({
-      directory: true,
-      multiple: false,
-      title: store.kind === "skill" ? "Choisir le dossier de la bibliothèque" : "Choisir le dossier des agents",
-    });
-    if (typeof dir !== "string") return;
-    if (store.kind === "skill") await store.setLibrary(dir);
-    else await store.setAgentsLibrary(dir);
-  }
+  let libraryChooserOpen = $state(false);
 
   function toggleTag(t: string) {
     store.selectedTags = store.selectedTags.includes(t)
@@ -47,9 +38,11 @@
 
 <aside class="sidebar">
   <section>
-    <h3>{store.kind === "skill" ? "Bibliothèque" : "Agents"}</h3>
+    <h3>Bibliothèque</h3>
+    {#if store.config?.library_path}
+      <div class="path selectable" title={store.config.library_path}>{store.config.library_path}</div>
+    {/if}
     {#if store.library}
-      <div class="path selectable" title={store.library.root}>{store.library.root}</div>
       <div class="muted">{store.skills.length} {store.skills.length > 1 ? KIND_LABEL[store.kind].many : KIND_LABEL[store.kind].one}</div>
     {:else if store.kind === "skill"}
       <div class="muted">Aucune bibliothèque configurée.</div>
@@ -57,12 +50,15 @@
       <div class="muted">Dossier d'agents introuvable. Par défaut : <code>agents/</code> dans la bibliothèque.</div>
     {/if}
     <div class="row" style="margin-top:6px">
-      <button class="small" onclick={pickLibrary}>Choisir…</button>
+      <button class="small" disabled={store.loading} onclick={() => (libraryChooserOpen = true)}>Ouvrir / Cloner…</button>
       {#if store.kind === "agent" && store.config?.agents_path}
         <button class="small" title="Revenir à agents/ dans la bibliothèque" onclick={() => store.setAgentsLibrary(null)}>Par défaut</button>
       {/if}
-      <button class="small" disabled={!store.library} onclick={() => store.run("Rechargé", () => store.refreshLibrary())}>Recharger</button>
+      <button class="small" disabled={!store.library || store.loading} onclick={() => store.run("Rechargé", () => store.refreshLibrary())}>Recharger</button>
     </div>
+    {#if store.kind === "agent" && store.config?.agents_path}
+      <div class="muted path" style="margin-top:6px">Dossier d’agents personnalisé : {store.config.agents_path}</div>
+    {/if}
   </section>
 
   {#if store.library}
@@ -145,6 +141,10 @@
     {/if}
   {/if}
 </aside>
+
+{#if libraryChooserOpen}
+  <LibraryChooser onclose={() => (libraryChooserOpen = false)} />
+{/if}
 
 <style>
   .sidebar {

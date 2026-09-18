@@ -19,7 +19,9 @@
   <div class="main">
     <Sidebar />
     <SkillList />
-    <SkillDetail />
+    {#key `${store.libraryGeneration}:${store.config?.agents_path}:${store.kind}`}
+      <SkillDetail />
+    {/key}
   </div>
 </div>
 

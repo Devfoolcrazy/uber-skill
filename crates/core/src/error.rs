@@ -20,6 +20,8 @@ pub enum Error {
     NoLibrary,
     #[error("unsupported: {0}")]
     Unsupported(String),
+    #[error("{0}")]
+    Git(String),
     #[error("not a directory: {0}")]
     NotADirectory(PathBuf),
     #[error("json error: {0}")]

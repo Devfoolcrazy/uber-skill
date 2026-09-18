@@ -71,6 +71,22 @@ Barre du haut : bascule Skills / Agents, sélecteur de projet et de cible, bouto
 Colonnes : filtres (catégories, tags, harnais) · liste avec recherche et cases à cocher · détail (aperçu markdown, éditeur ⌘S, fichiers, lint, tags & catégorie).
 Barre flottante quand des éléments sont cochés : installation dans le projet courant. Tiroir « Installés » : état de dérive, diff, pull/push, retirer.
 
+### Ouvrir une bibliothèque Git
+
+Dans la barre latérale, **Ouvrir / Cloner…** propose deux parcours :
+
+- **Dépôt local** : sélectionner la racine d’un dépôt Git déjà cloné (les worktrees sont également acceptés).
+- **Cloner un dépôt** : saisir l’URL, choisir un dossier parent et nommer le nouveau dossier à créer. Une destination déjà existante est refusée, même si elle est vide.
+
+Git doit être installé et accessible à l’application. Pour un dépôt privé, les accès Git
+(clé SSH ou gestionnaire d’identifiants HTTPS) doivent déjà être configurés sur la machine ;
+l’application ne demande pas de mot de passe dans un terminal.
+
+L’ouverture d’un dépôt charge ses skills et ses agents et remplace l’ancien chemin d’agents
+personnalisé. Le choix est enregistré pour le prochain lancement. Un échec de validation ou
+de clonage conserve la bibliothèque précédente. Les bibliothèques de dossiers configurées
+avant cette évolution restent lisibles au démarrage.
+
 ## Tests
 
 ```sh

@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
-use uber_skill_core::{install, lint, search, Config, FileDiff, InstalledSkill, Issue, ItemKind, Library, LockEntry, Query, Skill, Target};
+use uber_skill_core::{git, install, lint, search, Config, FileDiff, InstalledSkill, Issue, ItemKind, Library, LockEntry, Query, Skill, Target};
 
 struct AppState {
     config: Mutex<Config>,
@@ -43,10 +43,22 @@ fn get_config(state: State<AppState>) -> CmdResult<Config> {
 
 #[tauri::command]
 fn set_library(state: State<AppState>, path: PathBuf) -> CmdResult<Config> {
-    let lib = Library::open(&path).map_err(err)?;
     let mut cfg = state.config.lock().map_err(err)?;
-    cfg.library_path = Some(lib.root().to_path_buf());
-    cfg.save().map_err(err)?;
+    let next = git::library_config(&cfg, &path).map_err(err)?;
+    next.save().map_err(err)?;
+    *cfg = next;
+    Ok(cfg.clone())
+}
+
+#[tauri::command]
+async fn clone_library(state: State<'_, AppState>, url: String, parent: PathBuf, name: String) -> CmdResult<Config> {
+    // Network and checkout work run off the UI thread, without locking config.
+    let path = tauri::async_runtime::spawn_blocking(move || git::clone_repository(&url, &parent, &name))
+        .await.map_err(err)?.map_err(err)?;
+    let mut cfg = state.config.lock().map_err(err)?;
+    let next = git::library_config(&cfg, &path).map_err(err)?;
+    next.save().map_err(|e| format!("Dépôt cloné dans {}, mais configuration non enregistrée : {e}. Vous pouvez ouvrir ce dépôt localement.", path.display()))?;
+    *cfg = next;
     Ok(cfg.clone())
 }
 
@@ -252,6 +264,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             set_library,
+            clone_library,
             set_agents_library,
             set_editor,
             remember_project,
