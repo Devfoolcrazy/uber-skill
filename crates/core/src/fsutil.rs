@@ -27,9 +27,11 @@ pub fn is_ignored(name: &str) -> bool {
 /// All files under `root`, as paths relative to `root`, sorted, ignoring [`IGNORED_NAMES`].
 pub fn list_files(root: &Path) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
-    let walker = WalkDir::new(root).follow_links(true).min_depth(1).into_iter().filter_entry(|e| {
-        !e.file_name().to_str().map(is_ignored).unwrap_or(false)
-    });
+    let walker = WalkDir::new(root)
+        .follow_links(true)
+        .min_depth(1)
+        .into_iter()
+        .filter_entry(|e| !e.file_name().to_str().map(is_ignored).unwrap_or(false));
     for entry in walker {
         let entry = entry.map_err(|e| Error::io(root, e.into()))?;
         if entry.file_type().is_file() {
@@ -67,7 +69,10 @@ pub fn hash_path(path: &Path) -> Result<String> {
         return hash_dir(path);
     }
     let bytes = std::fs::read(path).map_err(|e| Error::io(path, e))?;
-    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
     let mut hasher = Sha256::new();
     hasher.update(name.as_bytes());
     hasher.update([0u8]);
@@ -125,8 +130,24 @@ pub fn is_text_file(path: &Path) -> bool {
     match path.extension().and_then(|e| e.to_str()) {
         Some(ext) => matches!(
             ext.to_ascii_lowercase().as_str(),
-            "md" | "txt" | "json" | "yaml" | "yml" | "toml" | "py" | "sh" | "js" | "ts"
-                | "rs" | "csv" | "html" | "css" | "xml" | "mjs" | "cjs" | "svelte" | "sql"
+            "md" | "txt"
+                | "json"
+                | "yaml"
+                | "yml"
+                | "toml"
+                | "py"
+                | "sh"
+                | "js"
+                | "ts"
+                | "rs"
+                | "csv"
+                | "html"
+                | "css"
+                | "xml"
+                | "mjs"
+                | "cjs"
+                | "svelte"
+                | "sql"
         ),
         None => true,
     }

@@ -52,7 +52,10 @@ impl LockFile {
     pub fn load(target_dir: &Path) -> Result<LockFile> {
         let path = target_dir.join(LOCK_FILE);
         if !path.is_file() {
-            return Ok(LockFile { version: 1, skills: BTreeMap::new() });
+            return Ok(LockFile {
+                version: 1,
+                skills: BTreeMap::new(),
+            });
         }
         let text = fsutil::read_to_string(&path)?;
         Ok(serde_json::from_str(&text)?)
@@ -139,7 +142,12 @@ pub fn install(skill: &Skill, project_root: &Path, target: &Target) -> Result<Lo
     install_with_state(skill, project_root, target, None)
 }
 
-pub fn install_with_state(skill: &Skill, project_root: &Path, target: &Target, source_state: Option<SourceState>) -> Result<LockEntry> {
+pub fn install_with_state(
+    skill: &Skill,
+    project_root: &Path,
+    target: &Target,
+    source_state: Option<SourceState>,
+) -> Result<LockEntry> {
     let target_dir = target.dir_for(skill.kind, project_root)?;
     std::fs::create_dir_all(&target_dir).map_err(|e| Error::io(&target_dir, e))?;
     let dst = installed_path(&target_dir, &skill.id, skill.kind);
@@ -180,7 +188,9 @@ fn present_items(target_dir: &Path, kind: ItemKind) -> Result<BTreeMap<String, P
         let entry = entry.map_err(|e| Error::io(target_dir, e))?;
         let p = entry.path();
         let id = match kind {
-            ItemKind::Skill if p.is_dir() && p.join(SKILL_FILE).is_file() => p.file_name().and_then(|n| n.to_str()).map(String::from),
+            ItemKind::Skill if p.is_dir() && p.join(SKILL_FILE).is_file() => {
+                p.file_name().and_then(|n| n.to_str()).map(String::from)
+            }
             ItemKind::Agent if p.is_file() && p.extension().map(|e| e == "md").unwrap_or(false) => {
                 p.file_stem().and_then(|n| n.to_str()).map(String::from)
             }
@@ -194,8 +204,15 @@ fn present_items(target_dir: &Path, kind: ItemKind) -> Result<BTreeMap<String, P
 }
 
 /// Status of every item of `kind` in the project's target dir (tracked or not).
-pub fn status(library: Option<&Library>, project_root: &Path, target: &Target, kind: ItemKind) -> Result<Vec<InstalledSkill>> {
-    let Ok(target_dir) = target.dir_for(kind, project_root) else { return Ok(Vec::new()) };
+pub fn status(
+    library: Option<&Library>,
+    project_root: &Path,
+    target: &Target,
+    kind: ItemKind,
+) -> Result<Vec<InstalledSkill>> {
+    let Ok(target_dir) = target.dir_for(kind, project_root) else {
+        return Ok(Vec::new());
+    };
     let lock = LockFile::load(&target_dir)?;
     let present = present_items(&target_dir, kind)?;
     let mut out = Vec::new();
@@ -209,7 +226,10 @@ pub fn status(library: Option<&Library>, project_root: &Path, target: &Target, k
         let path = installed_path(&target_dir, &id, kind);
         let lock_entry = lock.skills.get(&id).cloned();
         let installed_hash = present.get(&id).map(|p| hash_path(p)).transpose()?;
-        let description = present.get(&id).and_then(|p| read_item(p, None, kind).ok()).map(|s| s.description);
+        let description = present
+            .get(&id)
+            .and_then(|p| read_item(p, None, kind).ok())
+            .map(|s| s.description);
         let library_skill = match (library, &lock_entry) {
             (Some(lib), _) => lib.get(&id).ok(),
             (None, Some(e)) if e.source.exists() => read_item(&e.source, None, kind).ok(),
@@ -239,7 +259,15 @@ pub fn status(library: Option<&Library>, project_root: &Path, target: &Target, k
             }
             (None, None, _) => continue,
         };
-        out.push(InstalledSkill { id, state, path, lock: lock_entry, installed_hash, library_hash, description });
+        out.push(InstalledSkill {
+            id,
+            state,
+            path,
+            lock: lock_entry,
+            installed_hash,
+            library_hash,
+            description,
+        });
     }
     Ok(out)
 }
@@ -255,17 +283,33 @@ fn diff_text(name: &str, ta: &str, tb: &str, in_a: bool, in_b: bool) -> FileDiff
         .context_radius(3)
         .header(&format!("a/{name}"), &format!("b/{name}"))
         .to_string();
-    FileDiff { file: name.to_string(), kind: kind.into(), unified }
+    FileDiff {
+        file: name.to_string(),
+        kind: kind.into(),
+        unified,
+    }
 }
 
 /// Unified diff of every differing file between two items (`a` = base, `b` = new).
 /// Works for two directories or two files.
 pub fn diff_paths(a: &Path, b: &Path) -> Result<Vec<FileDiff>> {
     if a.is_file() || b.is_file() {
-        let name = b.file_name().or_else(|| a.file_name()).map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let name = b
+            .file_name()
+            .or_else(|| a.file_name())
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
         let (in_a, in_b) = (a.is_file(), b.is_file());
-        let ta = if in_a { fsutil::read_to_string(a)? } else { String::new() };
-        let tb = if in_b { fsutil::read_to_string(b)? } else { String::new() };
+        let ta = if in_a {
+            fsutil::read_to_string(a)?
+        } else {
+            String::new()
+        };
+        let tb = if in_b {
+            fsutil::read_to_string(b)?
+        } else {
+            String::new()
+        };
         if in_a && in_b && ta == tb {
             return Ok(Vec::new());
         }
@@ -285,12 +329,24 @@ pub fn diff_paths(a: &Path, b: &Path) -> Result<Vec<FileDiff>> {
         if !is_text_file(&rel) {
             let same = in_a && in_b && std::fs::read(&pa).ok() == std::fs::read(&pb).ok();
             if !same {
-                out.push(FileDiff { file: name, kind: "binary".into(), unified: String::new() });
+                out.push(FileDiff {
+                    file: name,
+                    kind: "binary".into(),
+                    unified: String::new(),
+                });
             }
             continue;
         }
-        let ta = if in_a { fsutil::read_to_string(&pa).unwrap_or_default() } else { String::new() };
-        let tb = if in_b { fsutil::read_to_string(&pb).unwrap_or_default() } else { String::new() };
+        let ta = if in_a {
+            fsutil::read_to_string(&pa).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        let tb = if in_b {
+            fsutil::read_to_string(&pb).unwrap_or_default()
+        } else {
+            String::new()
+        };
         if in_a && in_b && ta == tb {
             continue;
         }
@@ -304,7 +360,10 @@ pub fn diff_installed(library: &Library, id: &str, project_root: &Path, target: 
     let lib_path = library.item_path(id)?;
     let inst = installed_path(&target.dir_for(library.kind(), project_root)?, id, library.kind());
     if !inst.exists() {
-        return Err(Error::SkillNotFound(format!("{id} (not installed in {})", inst.display())));
+        return Err(Error::SkillNotFound(format!(
+            "{id} (not installed in {})",
+            inst.display()
+        )));
     }
     diff_paths(&lib_path, &inst)
 }
@@ -321,7 +380,10 @@ pub fn sync_to_library(library: &Library, id: &str, project_root: &Path, target:
     let target_dir = target.dir_for(kind, project_root)?;
     let inst = installed_path(&target_dir, id, kind);
     if !inst.exists() {
-        return Err(Error::SkillNotFound(format!("{id} (not installed in {})", inst.display())));
+        return Err(Error::SkillNotFound(format!(
+            "{id} (not installed in {})",
+            inst.display()
+        )));
     }
     let lib_path = match library.item_path(id) {
         Ok(p) => p,
@@ -333,7 +395,13 @@ pub fn sync_to_library(library: &Library, id: &str, project_root: &Path, target:
     let mut lock = LockFile::load(&target_dir)?;
     lock.skills.insert(
         id.to_string(),
-        LockEntry { id: id.to_string(), source: lib_path, hash: skill.hash.clone(), installed_at: Utc::now().to_rfc3339(), source_state: None },
+        LockEntry {
+            id: id.to_string(),
+            source: lib_path,
+            hash: skill.hash.clone(),
+            installed_at: Utc::now().to_rfc3339(),
+            source_state: None,
+        },
     );
     lock.save(&target_dir)?;
     Ok(skill)
@@ -345,7 +413,13 @@ pub fn adopt(library: &Library, id: &str, project_root: &Path, target: &Target) 
     let target_dir = target.dir_for(kind, project_root)?;
     let inst = installed_path(&target_dir, id, kind);
     let skill = library.get(id)?;
-    let entry = LockEntry { id: id.to_string(), source: skill.path, hash: hash_path(&inst)?, installed_at: Utc::now().to_rfc3339(), source_state: None };
+    let entry = LockEntry {
+        id: id.to_string(),
+        source: skill.path,
+        hash: hash_path(&inst)?,
+        installed_at: Utc::now().to_rfc3339(),
+        source_state: None,
+    };
     let mut lock = LockFile::load(&target_dir)?;
     lock.skills.insert(id.to_string(), entry.clone());
     lock.save(&target_dir)?;
@@ -365,7 +439,10 @@ mod tests {
     fn install_status_drift_cycle() {
         let lib_tmp = tempfile::tempdir().unwrap();
         let proj = tempfile::tempdir().unwrap();
-        write(&lib_tmp.path().join("s1/SKILL.md"), "---\nname: s1\ndescription: one\n---\nv1\n");
+        write(
+            &lib_tmp.path().join("s1/SKILL.md"),
+            "---\nname: s1\ndescription: one\n---\nv1\n",
+        );
         write(&lib_tmp.path().join("s1/scripts/run.sh"), "echo hi\n");
         let lib = Library::open(lib_tmp.path()).unwrap();
         let t = Target::ClaudeCode;
@@ -381,7 +458,10 @@ mod tests {
         assert_eq!(st[0].state, DriftState::UpToDate);
 
         // Edit in the library -> LibraryUpdated
-        write(&lib.root().join("s1/SKILL.md"), "---\nname: s1\ndescription: one\n---\nv2\n");
+        write(
+            &lib.root().join("s1/SKILL.md"),
+            "---\nname: s1\ndescription: one\n---\nv2\n",
+        );
         let st = status(Some(&lib), proj.path(), &t, k).unwrap();
         assert_eq!(st[0].state, DriftState::LibraryUpdated);
         let d = diff_installed(&lib, "s1", proj.path(), &t).unwrap();
@@ -389,23 +469,44 @@ mod tests {
         assert!(d[0].unified.contains("-v2") && d[0].unified.contains("+v1"));
 
         // Edit in the project too -> Conflict
-        write(&proj.path().join(".claude/skills/s1/SKILL.md"), "---\nname: s1\ndescription: one\n---\nv3\n");
-        assert_eq!(status(Some(&lib), proj.path(), &t, k).unwrap()[0].state, DriftState::Conflict);
+        write(
+            &proj.path().join(".claude/skills/s1/SKILL.md"),
+            "---\nname: s1\ndescription: one\n---\nv3\n",
+        );
+        assert_eq!(
+            status(Some(&lib), proj.path(), &t, k).unwrap()[0].state,
+            DriftState::Conflict
+        );
 
         // Push project version to library -> UpToDate
         let s = sync_to_library(&lib, "s1", proj.path(), &t).unwrap();
         assert!(s.body_chars > 0);
-        assert_eq!(status(Some(&lib), proj.path(), &t, k).unwrap()[0].state, DriftState::UpToDate);
+        assert_eq!(
+            status(Some(&lib), proj.path(), &t, k).unwrap()[0].state,
+            DriftState::UpToDate
+        );
         assert!(lib.read_main("s1").unwrap().contains("v3"));
 
         // Edit project only -> ProjectModified, then pull library -> UpToDate
-        write(&proj.path().join(".claude/skills/s1/SKILL.md"), "---\nname: s1\ndescription: one\n---\nv4\n");
-        assert_eq!(status(Some(&lib), proj.path(), &t, k).unwrap()[0].state, DriftState::ProjectModified);
+        write(
+            &proj.path().join(".claude/skills/s1/SKILL.md"),
+            "---\nname: s1\ndescription: one\n---\nv4\n",
+        );
+        assert_eq!(
+            status(Some(&lib), proj.path(), &t, k).unwrap()[0].state,
+            DriftState::ProjectModified
+        );
         sync_to_project(&lib, "s1", proj.path(), &t).unwrap();
-        assert_eq!(status(Some(&lib), proj.path(), &t, k).unwrap()[0].state, DriftState::UpToDate);
+        assert_eq!(
+            status(Some(&lib), proj.path(), &t, k).unwrap()[0].state,
+            DriftState::UpToDate
+        );
 
         // Untracked + adopt
-        write(&proj.path().join(".claude/skills/s2/SKILL.md"), "---\nname: s2\ndescription: two\n---\n");
+        write(
+            &proj.path().join(".claude/skills/s2/SKILL.md"),
+            "---\nname: s2\ndescription: two\n---\n",
+        );
         let st = status(Some(&lib), proj.path(), &t, k).unwrap();
         assert_eq!(st.iter().find(|s| s.id == "s2").unwrap().state, DriftState::Untracked);
 
@@ -419,7 +520,10 @@ mod tests {
     fn agent_install_cycle() {
         let lib_tmp = tempfile::tempdir().unwrap();
         let proj = tempfile::tempdir().unwrap();
-        write(&lib_tmp.path().join("coder.md"), "---\nname: coder\ndescription: C\nmodel: opus\n---\nv1\n");
+        write(
+            &lib_tmp.path().join("coder.md"),
+            "---\nname: coder\ndescription: C\nmodel: opus\n---\nv1\n",
+        );
         let lib = Library::open_kind(lib_tmp.path(), ItemKind::Agent).unwrap();
         let t = Target::ClaudeCode;
         let k = ItemKind::Agent;
@@ -428,20 +532,32 @@ mod tests {
         install(&a, proj.path(), &t).unwrap();
         assert!(proj.path().join(".claude/agents/coder.md").is_file());
         assert!(proj.path().join(".claude/agents").join(LOCK_FILE).is_file());
-        assert_eq!(status(Some(&lib), proj.path(), &t, k).unwrap()[0].state, DriftState::UpToDate);
+        assert_eq!(
+            status(Some(&lib), proj.path(), &t, k).unwrap()[0].state,
+            DriftState::UpToDate
+        );
 
         // Agents are unsupported on other hosts.
         assert!(install(&a, proj.path(), &Target::Cursor).is_err());
         assert!(status(Some(&lib), proj.path(), &Target::Cursor, k).unwrap().is_empty());
 
-        write(&proj.path().join(".claude/agents/coder.md"), "---\nname: coder\ndescription: C\nmodel: opus\n---\nv2\n");
-        assert_eq!(status(Some(&lib), proj.path(), &t, k).unwrap()[0].state, DriftState::ProjectModified);
+        write(
+            &proj.path().join(".claude/agents/coder.md"),
+            "---\nname: coder\ndescription: C\nmodel: opus\n---\nv2\n",
+        );
+        assert_eq!(
+            status(Some(&lib), proj.path(), &t, k).unwrap()[0].state,
+            DriftState::ProjectModified
+        );
         let d = diff_installed(&lib, "coder", proj.path(), &t).unwrap();
         assert_eq!(d.len(), 1);
         assert_eq!(d[0].file, "coder.md");
         sync_to_library(&lib, "coder", proj.path(), &t).unwrap();
         assert!(lib.read_main("coder").unwrap().contains("v2"));
-        assert_eq!(status(Some(&lib), proj.path(), &t, k).unwrap()[0].state, DriftState::UpToDate);
+        assert_eq!(
+            status(Some(&lib), proj.path(), &t, k).unwrap()[0].state,
+            DriftState::UpToDate
+        );
 
         uninstall("coder", proj.path(), &t, k).unwrap();
         assert!(!proj.path().join(".claude/agents/coder.md").exists());

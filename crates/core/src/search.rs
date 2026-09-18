@@ -21,7 +21,11 @@ pub fn search<'a>(skills: &'a [Skill], q: &Query) -> Vec<&'a Skill> {
         .map(|t| t.to_lowercase())
         .collect();
     let wanted_tags: Vec<String> = q.tags.iter().map(|t| t.trim().to_lowercase()).collect();
-    let wanted_cat = q.category.as_deref().map(|c| c.trim().to_lowercase()).filter(|c| !c.is_empty());
+    let wanted_cat = q
+        .category
+        .as_deref()
+        .map(|c| c.trim().to_lowercase())
+        .filter(|c| !c.is_empty());
 
     let mut scored: Vec<(i32, &Skill)> = skills
         .iter()
@@ -50,7 +54,11 @@ pub fn search<'a>(skills: &'a [Skill], q: &Query) -> Vec<&'a Skill> {
                 } else if s.tags.iter().any(|tag| tag.contains(t)) {
                     hit += 20;
                 }
-                if s.category.as_deref().map(|c| c.to_lowercase().contains(t)).unwrap_or(false) {
+                if s.category
+                    .as_deref()
+                    .map(|c| c.to_lowercase().contains(t))
+                    .unwrap_or(false)
+                {
                     hit += 15;
                 }
                 if desc.contains(t) {

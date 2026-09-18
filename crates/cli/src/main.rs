@@ -147,11 +147,17 @@ enum Cmd {
 enum ConfigCmd {
     Show,
     /// Set the library root (skills in <root>/skills, agents in <root>/agents)
-    SetLibrary { path: PathBuf },
+    SetLibrary {
+        path: PathBuf,
+    },
     /// Set a separate agents folder (default: <root>/agents)
-    SetAgents { path: PathBuf },
+    SetAgents {
+        path: PathBuf,
+    },
     /// Set the external editor command (e.g. `code`)
-    SetEditor { command: String },
+    SetEditor {
+        command: String,
+    },
 }
 
 fn kind_of(cli: &Cli) -> ItemKind {
@@ -162,9 +168,9 @@ fn open_library(cli: &Cli) -> Result<Library> {
     let kind = kind_of(cli);
     let path = match &cli.library {
         Some(p) => p.clone(),
-        None => Config::load()?.path_for(kind).context(
-            "no library configured: run `uber-skill config set-library <path>` or pass --library",
-        )?,
+        None => Config::load()?
+            .path_for(kind)
+            .context("no library configured: run `uber-skill config set-library <path>` or pass --library")?,
     };
     Library::open_kind(&path, kind).with_context(|| format!("opening {} library {}", kind.label(), path.display()))
 }
@@ -183,10 +189,31 @@ fn main() -> Result<()> {
                 if cli.json {
                     return print_json(&cfg);
                 }
-                println!("config file: {}", uber_skill_core::config::config_path().map(|p| p.display().to_string()).unwrap_or_default());
-                println!("library:     {}", cfg.library_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "(not set)".into()));
-                println!("skills:      {}", cfg.skills_path().map(|p| p.display().to_string()).unwrap_or_else(|_| "(not set)".into()));
-                println!("agents:      {}", cfg.agents_path().map(|p| p.display().to_string()).unwrap_or_else(|_| "(not set)".into()));
+                println!(
+                    "config file: {}",
+                    uber_skill_core::config::config_path()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_default()
+                );
+                println!(
+                    "library:     {}",
+                    cfg.library_path
+                        .as_ref()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|| "(not set)".into())
+                );
+                println!(
+                    "skills:      {}",
+                    cfg.skills_path()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|_| "(not set)".into())
+                );
+                println!(
+                    "agents:      {}",
+                    cfg.agents_path()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|_| "(not set)".into())
+                );
                 println!("editor:      {}", cfg.editor_command.as_deref().unwrap_or("(default)"));
                 for p in &cfg.recent_projects {
                     println!("project:     {} [{}]", p.path.display(), p.target.label());
@@ -215,14 +242,21 @@ fn main() -> Result<()> {
                 println!("editor set to {command}");
             }
         },
-        Cmd::List { tag, category, host } | Cmd::Search { tag, category, host, .. } => {
+        Cmd::List { tag, category, host }
+        | Cmd::Search {
+            tag, category, host, ..
+        } => {
             let lib = open_library(&cli)?;
             let scan = lib.scan()?;
             let text = match &cli.cmd {
                 Cmd::Search { query, .. } => Some(query.clone()),
                 _ => None,
             };
-            let q = Query { text, tags: tag.clone(), category: category.clone() };
+            let q = Query {
+                text,
+                tags: tag.clone(),
+                category: category.clone(),
+            };
             let host_target = host.as_deref().map(Target::parse);
             let hits: Vec<_> = search::search(&scan.skills, &q)
                 .into_iter()
@@ -232,9 +266,17 @@ fn main() -> Result<()> {
                 return print_json(&hits);
             }
             for s in &hits {
-                let tags = if s.tags.is_empty() { String::new() } else { format!("  [{}]", s.tags.join(", ")) };
+                let tags = if s.tags.is_empty() {
+                    String::new()
+                } else {
+                    format!("  [{}]", s.tags.join(", "))
+                };
                 let cat = s.category.as_deref().map(|c| format!("  ({c})")).unwrap_or_default();
-                let hosts = if s.hosts.is_empty() { String::new() } else { format!("  hosts: {}", s.hosts.join(", ")) };
+                let hosts = if s.hosts.is_empty() {
+                    String::new()
+                } else {
+                    format!("  hosts: {}", s.hosts.join(", "))
+                };
                 println!("{:<32}{cat}{tags}{hosts}", s.id);
                 println!("    {}", truncate(&s.description, 110));
             }
@@ -253,8 +295,22 @@ fn main() -> Result<()> {
             println!("name:        {}", s.name);
             println!("description: {}", s.description);
             println!("category:    {}", s.category.as_deref().unwrap_or("-"));
-            println!("tags:        {}", if s.tags.is_empty() { "-".into() } else { s.tags.join(", ") });
-            println!("hosts:       {}", if s.hosts.is_empty() { "any".into() } else { s.hosts.join(", ") });
+            println!(
+                "tags:        {}",
+                if s.tags.is_empty() {
+                    "-".into()
+                } else {
+                    s.tags.join(", ")
+                }
+            );
+            println!(
+                "hosts:       {}",
+                if s.hosts.is_empty() {
+                    "any".into()
+                } else {
+                    s.hosts.join(", ")
+                }
+            );
             println!("path:        {}", s.path.display());
             println!("hash:        {}", &s.hash[..12]);
             for (k, v) in &s.extra {
@@ -265,19 +321,48 @@ fn main() -> Result<()> {
                 println!("  {f}");
             }
         }
-        Cmd::New { id, description, category, tag, host } => {
+        Cmd::New {
+            id,
+            description,
+            category,
+            tag,
+            host,
+        } => {
             let lib = open_library(&cli)?;
             let s = lib.create(id, description, category.as_deref(), tag, host)?;
             println!("created {}", s.path.display());
         }
-        Cmd::Tag { id, add, remove, set, category, clear_category, host, remove_host, clear_hosts, description } => {
+        Cmd::Tag {
+            id,
+            add,
+            remove,
+            set,
+            category,
+            clear_category,
+            host,
+            remove_host,
+            clear_hosts,
+            description,
+        } => {
             let lib = open_library(&cli)?;
             let current = lib.get(id)?;
-            let mut tags: Vec<String> = if set.is_empty() { current.tags.clone() } else { set.clone() };
+            let mut tags: Vec<String> = if set.is_empty() {
+                current.tags.clone()
+            } else {
+                set.clone()
+            };
             tags.extend(add.iter().cloned());
             tags.retain(|t| !remove.iter().any(|r| r.eq_ignore_ascii_case(t)));
-            let cat = if *clear_category { Some(None) } else { category.as_deref().map(Some) };
-            let mut hosts: Vec<String> = if *clear_hosts { Vec::new() } else { current.hosts.clone() };
+            let cat = if *clear_category {
+                Some(None)
+            } else {
+                category.as_deref().map(Some)
+            };
+            let mut hosts: Vec<String> = if *clear_hosts {
+                Vec::new()
+            } else {
+                current.hosts.clone()
+            };
             hosts.extend(host.iter().cloned());
             hosts.retain(|h| !remove_host.iter().any(|r| r.eq_ignore_ascii_case(h)));
             for h in &hosts {
@@ -291,7 +376,11 @@ fn main() -> Result<()> {
                 s.id,
                 s.category.as_deref().unwrap_or("-"),
                 s.tags.join(", "),
-                if s.hosts.is_empty() { "any".into() } else { s.hosts.join(", ") }
+                if s.hosts.is_empty() {
+                    "any".into()
+                } else {
+                    s.hosts.join(", ")
+                }
             );
         }
         Cmd::Import { path, r#as } => {
@@ -320,7 +409,12 @@ fn main() -> Result<()> {
                 }
                 println!("{}:", s.id);
                 for i in &issues {
-                    println!("  {:<7} {:<12} {}", format!("{:?}", i.severity).to_lowercase(), i.rule, i.message);
+                    println!(
+                        "  {:<7} {:<12} {}",
+                        format!("{:?}", i.severity).to_lowercase(),
+                        i.rule,
+                        i.message
+                    );
                 }
             }
             if cli.json {
@@ -343,7 +437,11 @@ fn main() -> Result<()> {
                     eprintln!("warning: {w}");
                 }
                 install::install(&s, &root, &target)?;
-                println!("installed {} -> {}", id, install::installed_path(&dir, id, s.kind).display());
+                println!(
+                    "installed {} -> {}",
+                    id,
+                    install::installed_path(&dir, id, s.kind).display()
+                );
             }
             remember(&root, &target)?;
         }
@@ -421,7 +519,10 @@ fn main() -> Result<()> {
 }
 
 fn project_root(p: &ProjectArgs) -> Result<(PathBuf, Target)> {
-    let root = p.project.canonicalize().with_context(|| format!("project {}", p.project.display()))?;
+    let root = p
+        .project
+        .canonicalize()
+        .with_context(|| format!("project {}", p.project.display()))?;
     Ok((root, Target::parse(&p.target)))
 }
 

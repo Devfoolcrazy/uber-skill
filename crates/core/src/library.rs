@@ -29,7 +29,10 @@ pub fn validate_id(id: &str) -> std::result::Result<(), String> {
     if id.is_empty() || id.len() > 64 {
         return Err("must be 1 to 64 characters".into());
     }
-    if !id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    {
         return Err("only lowercase letters, digits and hyphens are allowed".into());
     }
     if id.starts_with('-') || id.ends_with('-') || id.contains("--") {
@@ -73,7 +76,10 @@ pub fn read_item(path: &Path, library_root: Option<&Path>, kind: ItemKind) -> Re
             .into_iter()
             .map(|p| p.to_string_lossy().replace('\\', "/"))
             .collect(),
-        ItemKind::Agent => vec![md.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()],
+        ItemKind::Agent => vec![md
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default()],
     };
     let extra = doc
         .front
@@ -170,7 +176,11 @@ impl Library {
             ItemKind::Agent => {
                 entry.file_type().is_file()
                     && entry.path().extension().map(|e| e == "md").unwrap_or(false)
-                    && !entry.file_name().to_str().unwrap_or("").starts_with(|c: char| c.is_ascii_uppercase())
+                    && !entry
+                        .file_name()
+                        .to_str()
+                        .unwrap_or("")
+                        .starts_with(|c: char| c.is_ascii_uppercase())
             }
         }
     }
@@ -226,14 +236,22 @@ impl Library {
                     if let Some(prev) = seen.get(&item.id) {
                         result.warnings.push(ScanWarning {
                             path: path.to_path_buf(),
-                            message: format!("duplicate {} id `{}` (already at {})", self.kind.label(), item.id, prev.display()),
+                            message: format!(
+                                "duplicate {} id `{}` (already at {})",
+                                self.kind.label(),
+                                item.id,
+                                prev.display()
+                            ),
                         });
                         continue;
                     }
                     seen.insert(item.id.clone(), path.to_path_buf());
                     result.skills.push(item);
                 }
-                Err(e) => result.warnings.push(ScanWarning { path: path.to_path_buf(), message: e.to_string() }),
+                Err(e) => result.warnings.push(ScanWarning {
+                    path: path.to_path_buf(),
+                    message: e.to_string(),
+                }),
             }
         }
         Ok(result)
@@ -252,7 +270,14 @@ impl Library {
     }
 
     /// Create a new item with a minimal main file at the library root.
-    pub fn create(&self, id: &str, description: &str, category: Option<&str>, tags: &[String], hosts: &[String]) -> Result<Skill> {
+    pub fn create(
+        &self,
+        id: &str,
+        description: &str,
+        category: Option<&str>,
+        tags: &[String],
+        hosts: &[String],
+    ) -> Result<Skill> {
         validate_id(id).map_err(|_| Error::InvalidId(id.to_string()))?;
         if self.item_path(id).is_ok() {
             return Err(Error::SkillExists(id.to_string()));
@@ -292,7 +317,9 @@ impl Library {
                 if rel == name || rel.is_empty() {
                     Ok(path)
                 } else {
-                    Err(Error::InvalidId(format!("agents have a single file ({name}), not {rel}")))
+                    Err(Error::InvalidId(format!(
+                        "agents have a single file ({name}), not {rel}"
+                    )))
                 }
             }
         }
@@ -402,12 +429,21 @@ mod tests {
     fn scans_nested_and_flags_duplicates() {
         let tmp = tempfile::tempdir().unwrap();
         let r = tmp.path();
-        write(&r.join("alpha/SKILL.md"), "---\nname: alpha\ndescription: A\nmetadata:\n  tags: x, y\n---\nbody");
+        write(
+            &r.join("alpha/SKILL.md"),
+            "---\nname: alpha\ndescription: A\nmetadata:\n  tags: x, y\n---\nbody",
+        );
         write(&r.join("cat/beta/SKILL.md"), "---\nname: beta\ndescription: B\n---\n");
-        write(&r.join("other/alpha/SKILL.md"), "---\nname: alpha\ndescription: dup\n---\n");
+        write(
+            &r.join("other/alpha/SKILL.md"),
+            "---\nname: alpha\ndescription: dup\n---\n",
+        );
         write(&r.join("broken/SKILL.md"), "no frontmatter");
         write(&r.join(".git/config"), "x");
-        write(&r.join("_AGENTS/coder.md"), "---\nname: coder\ndescription: C\n---\nagent");
+        write(
+            &r.join("_AGENTS/coder.md"),
+            "---\nname: coder\ndescription: C\n---\nagent",
+        );
         write(&r.join("_AGENTS/README.md"), "not an agent");
         let lib = Library::open(r).unwrap();
         let res = lib.scan().unwrap();
@@ -430,10 +466,20 @@ mod tests {
     fn create_update_delete() {
         let tmp = tempfile::tempdir().unwrap();
         let lib = Library::open(tmp.path()).unwrap();
-        let s = lib.create("my-skill", "does things", Some("dev"), &["Rust".into()], &[]).unwrap();
+        let s = lib
+            .create("my-skill", "does things", Some("dev"), &["Rust".into()], &[])
+            .unwrap();
         assert_eq!(s.tags, vec!["rust"]);
         assert_eq!(s.category.as_deref(), Some("dev"));
-        let s = lib.update_meta("my-skill", Some(&["a".into(), "b".into()]), Some(None), Some(&["codex".into()]), None).unwrap();
+        let s = lib
+            .update_meta(
+                "my-skill",
+                Some(&["a".into(), "b".into()]),
+                Some(None),
+                Some(&["codex".into()]),
+                None,
+            )
+            .unwrap();
         assert_eq!(s.tags, vec!["a", "b"]);
         assert_eq!(s.category, None);
         assert_eq!(s.hosts, vec!["codex"]);
@@ -449,16 +495,23 @@ mod tests {
     fn agent_lifecycle() {
         let tmp = tempfile::tempdir().unwrap();
         let lib = Library::open_kind(tmp.path(), ItemKind::Agent).unwrap();
-        let a = lib.create("coder", "writes code", Some("dev"), &["code".into()], &[]).unwrap();
+        let a = lib
+            .create("coder", "writes code", Some("dev"), &["code".into()], &[])
+            .unwrap();
         assert!(tmp.path().join("coder.md").is_file());
         assert_eq!(a.kind, ItemKind::Agent);
         assert!(lib.read_file("coder", "coder.md").unwrap().contains("name: coder"));
         assert!(lib.read_file("coder", "other.md").is_err());
-        let a = lib.write_main("coder", "---\nname: coder\ndescription: v2\nmodel: opus\n---\nbody\n").unwrap();
+        let a = lib
+            .write_main("coder", "---\nname: coder\ndescription: v2\nmodel: opus\n---\nbody\n")
+            .unwrap();
         assert_eq!(a.description, "v2");
         assert_eq!(a.extra.get("model").map(String::as_str), Some("opus"));
         let ext = tempfile::tempdir().unwrap();
-        write(&ext.path().join("reviewer.md"), "---\nname: reviewer\ndescription: R\n---\nx");
+        write(
+            &ext.path().join("reviewer.md"),
+            "---\nname: reviewer\ndescription: R\n---\nx",
+        );
         let r = lib.import(&ext.path().join("reviewer.md"), None).unwrap();
         assert_eq!(r.id, "reviewer");
         lib.delete("coder").unwrap();

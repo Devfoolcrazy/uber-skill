@@ -43,13 +43,14 @@ pub fn config_path() -> Option<PathBuf> {
     if let Ok(p) = std::env::var("UBER_SKILL_CONFIG") {
         return Some(PathBuf::from(p));
     }
-    directories::ProjectDirs::from("com", "lefebvreremy", "uber-skill")
-        .map(|d| d.config_dir().join("config.json"))
+    directories::ProjectDirs::from("com", "lefebvreremy", "uber-skill").map(|d| d.config_dir().join("config.json"))
 }
 
 impl Config {
     pub fn load() -> Result<Config> {
-        let Some(path) = config_path() else { return Ok(Config::default()) };
+        let Some(path) = config_path() else {
+            return Ok(Config::default());
+        };
         if !path.is_file() {
             return Ok(Config::default());
         }
@@ -85,7 +86,11 @@ impl Config {
         let root = self.library_path()?;
         let modern = root.join(AGENTS_SUBDIR);
         let legacy = root.join(LEGACY_AGENTS_SUBDIR);
-        Ok(if !modern.is_dir() && legacy.is_dir() { legacy } else { modern })
+        Ok(if !modern.is_dir() && legacy.is_dir() {
+            legacy
+        } else {
+            modern
+        })
     }
 
     pub fn path_for(&self, kind: crate::model::ItemKind) -> Result<PathBuf> {

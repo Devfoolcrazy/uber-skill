@@ -5,9 +5,9 @@ use std::process::{Command, Stdio};
 
 use crate::{Config, Error, Result};
 
+pub mod installation;
 pub mod publication;
 pub mod sync;
-pub mod installation;
 
 static OPERATION_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -17,8 +17,7 @@ fn command() -> Command {
     for key in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"] {
         cmd.env_remove(key);
     }
-    cmd.env("GIT_TERMINAL_PROMPT", "0")
-        .stdin(Stdio::null());
+    cmd.env("GIT_TERMINAL_PROMPT", "0").stdin(Stdio::null());
     if std::env::var_os("GIT_SSH_COMMAND").is_none() {
         cmd.env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes -o ConnectTimeout=15");
     }
@@ -26,16 +25,18 @@ fn command() -> Command {
 }
 
 fn run(cmd: &mut Command) -> Result<String> {
-    let output = cmd.output().map_err(|e| {
-        Error::Git(format!("Impossible de lancer Git. Vérifiez son installation : {e}"))
-    })?;
+    let output = cmd
+        .output()
+        .map_err(|e| Error::Git(format!("Impossible de lancer Git. Vérifiez son installation : {e}")))?;
     if !output.status.success() {
         return Err(Error::Git(format!(
             "Échec de Git : {}",
             String::from_utf8_lossy(&output.stderr).trim()
         )));
     }
-    Ok(String::from_utf8_lossy(&output.stdout).trim_end_matches(['\r', '\n']).to_owned())
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .trim_end_matches(['\r', '\n'])
+        .to_owned())
 }
 
 /// Require the working-tree root, including linked worktrees; reject bare repos
@@ -50,7 +51,8 @@ pub fn repository_root(path: &Path) -> Result<PathBuf> {
     let root = root.canonicalize().map_err(|e| Error::io(&root, e))?;
     if root != path {
         return Err(Error::Git(format!(
-            "Choisissez la racine du dépôt Git : {}", root.display()
+            "Choisissez la racine du dépôt Git : {}",
+            root.display()
         )));
     }
     Ok(root)
@@ -71,10 +73,17 @@ pub fn clone_repository(url: &str, parent: &Path, name: &str) -> Result<PathBuf>
     if url.is_empty() || url.starts_with('-') || url.chars().any(char::is_control) {
         return Err(Error::Git("Indiquez une URL de dépôt Git valide.".into()));
     }
-    if name.is_empty() || name == "." || name == ".." || name.starts_with('.')
-        || name.trim() != name || name.contains(['/', '\\', ':']) || name.chars().any(char::is_control)
+    if name.is_empty()
+        || name == "."
+        || name == ".."
+        || name.starts_with('.')
+        || name.trim() != name
+        || name.contains(['/', '\\', ':'])
+        || name.chars().any(char::is_control)
     {
-        return Err(Error::Git("Indiquez un nom de dossier simple, sans séparateur de chemin.".into()));
+        return Err(Error::Git(
+            "Indiquez un nom de dossier simple, sans séparateur de chemin.".into(),
+        ));
     }
     let parent = parent.canonicalize().map_err(|e| Error::io(parent, e))?;
     if !parent.is_dir() {
@@ -84,22 +93,39 @@ pub fn clone_repository(url: &str, parent: &Path, name: &str) -> Result<PathBuf>
     // Reserve the destination atomically, rejecting even existing empty folders
     // and dangling symlinks. On failure, never recursively delete user files.
     std::fs::create_dir(&destination).map_err(|e| {
-        Error::Git(format!("Impossible de créer {} : {e}. Choisissez un nouveau dossier.", destination.display()))
+        Error::Git(format!(
+            "Impossible de créer {} : {e}. Choisissez un nouveau dossier.",
+            destination.display()
+        ))
     })?;
-    let result = run(command().args([
-        "-c", "protocol.allow=never",
-        "-c", "protocol.https.allow=always",
-        "-c", "protocol.http.allow=always",
-        "-c", "protocol.ssh.allow=always",
-        "-c", "protocol.git.allow=always",
-        "-c", "protocol.file.allow=always",
-        "clone", "--", url,
-    ]).arg(&destination));
+    let result = run(command()
+        .args([
+            "-c",
+            "protocol.allow=never",
+            "-c",
+            "protocol.https.allow=always",
+            "-c",
+            "protocol.http.allow=always",
+            "-c",
+            "protocol.ssh.allow=always",
+            "-c",
+            "protocol.git.allow=always",
+            "-c",
+            "protocol.file.allow=always",
+            "clone",
+            "--",
+            url,
+        ])
+        .arg(&destination));
     if let Err(e) = result {
         let retained = std::fs::remove_dir(&destination).is_err();
         return Err(Error::Git(format!(
             "{e}\nLe clonage n’a pas abouti. Vérifiez l’URL, le réseau et vos accès Git.{}",
-            if retained { format!(" Le dossier partiel a été conservé : {}", destination.display()) } else { String::new() }
+            if retained {
+                format!(" Le dossier partiel a été conservé : {}", destination.display())
+            } else {
+                String::new()
+            }
         )));
     }
     repository_root(&destination)
@@ -120,13 +146,28 @@ mod tests {
         let tmp = tempdir().unwrap();
         assert!(repository_root(tmp.path()).is_err());
         git(tmp.path(), &["init", "-b", "main"]);
-        git(tmp.path(), &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "initial"]);
+        git(
+            tmp.path(),
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "initial",
+            ],
+        );
         assert_eq!(repository_root(tmp.path()).unwrap(), tmp.path().canonicalize().unwrap());
         let sub = tmp.path().join("skills");
         fs::create_dir(&sub).unwrap();
         assert!(repository_root(&sub).is_err());
         let linked = tmp.path().join("linked");
-        git(tmp.path(), &["worktree", "add", "-b", "linked", linked.to_str().unwrap()]);
+        git(
+            tmp.path(),
+            &["worktree", "add", "-b", "linked", linked.to_str().unwrap()],
+        );
         assert_eq!(repository_root(&linked).unwrap(), linked.canonicalize().unwrap());
         let bare = tmp.path().join("bare");
         git(tmp.path(), &["init", "--bare", bare.to_str().unwrap()]);
@@ -141,15 +182,44 @@ mod tests {
         git(&source, &["init", "-b", "main"]);
         fs::create_dir_all(source.join("skills/demo")).unwrap();
         fs::create_dir(source.join("agents")).unwrap();
-        fs::write(source.join("skills/demo/SKILL.md"), "---\nname: demo\ndescription: Demo\n---\nInstructions\n").unwrap();
-        fs::write(source.join("agents/reviewer.md"), "---\nname: reviewer\ndescription: Review\n---\nReview\n").unwrap();
+        fs::write(
+            source.join("skills/demo/SKILL.md"),
+            "---\nname: demo\ndescription: Demo\n---\nInstructions\n",
+        )
+        .unwrap();
+        fs::write(
+            source.join("agents/reviewer.md"),
+            "---\nname: reviewer\ndescription: Review\n---\nReview\n",
+        )
+        .unwrap();
         git(&source, &["add", "."]);
-        git(&source, &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "initial"]);
+        git(
+            &source,
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "initial",
+            ],
+        );
         let cloned = clone_repository(source.to_str().unwrap(), tmp.path(), "clone with spaces").unwrap();
-        assert_eq!(fs::read(cloned.join("skills/demo/SKILL.md")).unwrap(), fs::read(source.join("skills/demo/SKILL.md")).unwrap());
+        assert_eq!(
+            fs::read(cloned.join("skills/demo/SKILL.md")).unwrap(),
+            fs::read(source.join("skills/demo/SKILL.md")).unwrap()
+        );
         assert!(cloned.join("agents/reviewer.md").is_file());
-        assert_eq!(run(command().arg("-C").arg(&cloned).args(["remote", "get-url", "origin"])).unwrap(), source.to_str().unwrap());
-        let old = Config { agents_path: Some(source.join("elsewhere")), editor_command: Some("code".into()), ..Config::default() };
+        assert_eq!(
+            run(command().arg("-C").arg(&cloned).args(["remote", "get-url", "origin"])).unwrap(),
+            source.to_str().unwrap()
+        );
+        let old = Config {
+            agents_path: Some(source.join("elsewhere")),
+            editor_command: Some("code".into()),
+            ..Config::default()
+        };
         let next = library_config(&old, &cloned).unwrap();
         assert_eq!(next.library_path, Some(cloned));
         assert_eq!(next.agents_path, None);

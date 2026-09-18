@@ -5,7 +5,10 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
-use uber_skill_core::{git, install, lint, search, Config, FileDiff, InstalledSkill, Issue, ItemKind, Library, LockEntry, Query, Skill, Target};
+use uber_skill_core::{
+    git, install, lint, search, Config, FileDiff, InstalledSkill, Issue, ItemKind, Library, LockEntry, Query, Skill,
+    Target,
+};
 
 struct AppState {
     config: Mutex<Config>,
@@ -54,10 +57,17 @@ fn set_library(state: State<AppState>, path: PathBuf) -> CmdResult<Config> {
 async fn clone_library(state: State<'_, AppState>, url: String, parent: PathBuf, name: String) -> CmdResult<Config> {
     // Network and checkout work run off the UI thread, without locking config.
     let path = tauri::async_runtime::spawn_blocking(move || git::clone_repository(&url, &parent, &name))
-        .await.map_err(err)?.map_err(err)?;
+        .await
+        .map_err(err)?
+        .map_err(err)?;
     let mut cfg = state.config.lock().map_err(err)?;
     let next = git::library_config(&cfg, &path).map_err(err)?;
-    next.save().map_err(|e| format!("Dépôt cloné dans {}, mais configuration non enregistrée : {e}. Vous pouvez ouvrir ce dépôt localement.", path.display()))?;
+    next.save().map_err(|e| {
+        format!(
+            "Dépôt cloné dans {}, mais configuration non enregistrée : {e}. Vous pouvez ouvrir ce dépôt localement.",
+            path.display()
+        )
+    })?;
     *cfg = next;
     Ok(cfg.clone())
 }
@@ -66,32 +76,55 @@ async fn clone_library(state: State<'_, AppState>, url: String, parent: PathBuf,
 async fn git_publication_preview(state: State<'_, AppState>) -> CmdResult<git::publication::Preview> {
     let path = state.config.lock().map_err(err)?.library_path().map_err(err)?;
     tauri::async_runtime::spawn_blocking(move || git::publication::preview(&path))
-        .await.map_err(err)?.map_err(err)
+        .await
+        .map_err(err)?
+        .map_err(err)
 }
 
 #[tauri::command]
-async fn publish_library(state: State<'_, AppState>, snapshot: String, paths: Vec<String>, message: String) -> CmdResult<git::publication::PublicationResult> {
+async fn publish_library(
+    state: State<'_, AppState>,
+    snapshot: String,
+    paths: Vec<String>,
+    message: String,
+) -> CmdResult<git::publication::PublicationResult> {
     let path = state.config.lock().map_err(err)?.library_path().map_err(err)?;
     tauri::async_runtime::spawn_blocking(move || git::publication::publish(&path, &snapshot, &paths, &message))
-        .await.map_err(err)?.map_err(err)
+        .await
+        .map_err(err)?
+        .map_err(err)
 }
 
 #[tauri::command]
 async fn check_library_git(state: State<'_, AppState>) -> CmdResult<git::sync::SyncStatus> {
     let path = state.config.lock().map_err(err)?.library_path().map_err(err)?;
-    tauri::async_runtime::spawn_blocking(move || git::sync::check(&path)).await.map_err(err)?.map_err(err)
+    tauri::async_runtime::spawn_blocking(move || git::sync::check(&path))
+        .await
+        .map_err(err)?
+        .map_err(err)
 }
 
 #[tauri::command]
 async fn update_library_git(state: State<'_, AppState>, snapshot: String) -> CmdResult<git::sync::SyncStatus> {
     let path = state.config.lock().map_err(err)?.library_path().map_err(err)?;
-    tauri::async_runtime::spawn_blocking(move || git::sync::update(&path, &snapshot)).await.map_err(err)?.map_err(err)
+    tauri::async_runtime::spawn_blocking(move || git::sync::update(&path, &snapshot))
+        .await
+        .map_err(err)?
+        .map_err(err)
 }
 
 #[tauri::command]
-async fn prepare_install(state: State<'_, AppState>, kind: ItemKind, ids: Vec<String>, target: Target) -> CmdResult<git::installation::InstallationPlan> {
+async fn prepare_install(
+    state: State<'_, AppState>,
+    kind: ItemKind,
+    ids: Vec<String>,
+    target: Target,
+) -> CmdResult<git::installation::InstallationPlan> {
     let cfg = state.config.lock().map_err(err)?.clone();
-    tauri::async_runtime::spawn_blocking(move || git::installation::prepare(&cfg, kind, &ids, &target)).await.map_err(err)?.map_err(err)
+    tauri::async_runtime::spawn_blocking(move || git::installation::prepare(&cfg, kind, &ids, &target))
+        .await
+        .map_err(err)?
+        .map_err(err)
 }
 
 #[tauri::command]
@@ -126,7 +159,14 @@ fn scan_library(state: State<AppState>, kind: ItemKind) -> CmdResult<LibraryView
     let lib = open_library(&state, kind)?;
     let scan = lib.scan().map_err(err)?;
     let (tags, categories) = Library::facets(&scan.skills);
-    Ok(LibraryView { kind, root: lib.root().to_path_buf(), skills: scan.skills, warnings: scan.warnings, tags, categories })
+    Ok(LibraryView {
+        kind,
+        root: lib.root().to_path_buf(),
+        skills: scan.skills,
+        warnings: scan.warnings,
+        tags,
+        categories,
+    })
 }
 
 #[tauri::command]
@@ -166,13 +206,34 @@ struct MetaPatch {
 #[tauri::command]
 fn update_meta(state: State<AppState>, kind: ItemKind, id: String, patch: MetaPatch) -> CmdResult<Skill> {
     let lib = open_library(&state, kind)?;
-    let category = if patch.set_category { Some(patch.category.as_deref()) } else { None };
-    lib.update_meta(&id, patch.tags.as_deref(), category, patch.hosts.as_deref(), patch.description.as_deref()).map_err(err)
+    let category = if patch.set_category {
+        Some(patch.category.as_deref())
+    } else {
+        None
+    };
+    lib.update_meta(
+        &id,
+        patch.tags.as_deref(),
+        category,
+        patch.hosts.as_deref(),
+        patch.description.as_deref(),
+    )
+    .map_err(err)
 }
 
 #[tauri::command]
-fn create_skill(state: State<AppState>, kind: ItemKind, id: String, description: String, category: Option<String>, tags: Vec<String>, hosts: Vec<String>) -> CmdResult<Skill> {
-    open_library(&state, kind)?.create(&id, &description, category.as_deref(), &tags, &hosts).map_err(err)
+fn create_skill(
+    state: State<AppState>,
+    kind: ItemKind,
+    id: String,
+    description: String,
+    category: Option<String>,
+    tags: Vec<String>,
+    hosts: Vec<String>,
+) -> CmdResult<Skill> {
+    open_library(&state, kind)?
+        .create(&id, &description, category.as_deref(), &tags, &hosts)
+        .map_err(err)
 }
 
 /// Warnings for items whose declared hosts exclude `target` (empty = all fine).
@@ -199,7 +260,9 @@ fn delete_skill(state: State<AppState>, kind: ItemKind, id: String) -> CmdResult
 
 #[tauri::command]
 fn import_skill(state: State<AppState>, kind: ItemKind, path: PathBuf, new_id: Option<String>) -> CmdResult<Skill> {
-    open_library(&state, kind)?.import(&path, new_id.as_deref()).map_err(err)
+    open_library(&state, kind)?
+        .import(&path, new_id.as_deref())
+        .map_err(err)
 }
 
 #[tauri::command]
@@ -210,15 +273,27 @@ fn lint_skill(state: State<AppState>, kind: ItemKind, id: String) -> CmdResult<V
 }
 
 #[tauri::command]
-fn project_status(state: State<AppState>, kind: ItemKind, project: PathBuf, target: Target) -> CmdResult<Vec<InstalledSkill>> {
+fn project_status(
+    state: State<AppState>,
+    kind: ItemKind,
+    project: PathBuf,
+    target: Target,
+) -> CmdResult<Vec<InstalledSkill>> {
     let lib = open_library(&state, kind).ok();
     install::status(lib.as_ref(), &project, &target, kind).map_err(err)
 }
 
 #[tauri::command]
-async fn install_skills(state: State<'_, AppState>, plan: git::installation::InstallationPlan, project: PathBuf) -> CmdResult<Vec<LockEntry>> {
+async fn install_skills(
+    state: State<'_, AppState>,
+    plan: git::installation::InstallationPlan,
+    project: PathBuf,
+) -> CmdResult<Vec<LockEntry>> {
     let cfg = state.config.lock().map_err(err)?.clone();
-    tauri::async_runtime::spawn_blocking(move || git::installation::install_prepared(&cfg, &plan, &project)).await.map_err(err)?.map_err(err)
+    tauri::async_runtime::spawn_blocking(move || git::installation::install_prepared(&cfg, &plan, &project))
+        .await
+        .map_err(err)?
+        .map_err(err)
 }
 
 #[tauri::command]
@@ -227,23 +302,46 @@ fn uninstall_skill(kind: ItemKind, id: String, project: PathBuf, target: Target)
 }
 
 #[tauri::command]
-fn diff_installed(state: State<AppState>, kind: ItemKind, id: String, project: PathBuf, target: Target) -> CmdResult<Vec<FileDiff>> {
+fn diff_installed(
+    state: State<AppState>,
+    kind: ItemKind,
+    id: String,
+    project: PathBuf,
+    target: Target,
+) -> CmdResult<Vec<FileDiff>> {
     let lib = open_library(&state, kind)?;
     install::diff_installed(&lib, &id, &project, &target).map_err(err)
 }
 
 #[tauri::command]
-fn sync_skill(state: State<AppState>, kind: ItemKind, id: String, direction: String, project: PathBuf, target: Target) -> CmdResult<()> {
+fn sync_skill(
+    state: State<AppState>,
+    kind: ItemKind,
+    id: String,
+    direction: String,
+    project: PathBuf,
+    target: Target,
+) -> CmdResult<()> {
     let lib = open_library(&state, kind)?;
     match direction.as_str() {
-        "pull" => install::sync_to_project(&lib, &id, &project, &target).map(|_| ()).map_err(err),
-        "push" => install::sync_to_library(&lib, &id, &project, &target).map(|_| ()).map_err(err),
+        "pull" => install::sync_to_project(&lib, &id, &project, &target)
+            .map(|_| ())
+            .map_err(err),
+        "push" => install::sync_to_library(&lib, &id, &project, &target)
+            .map(|_| ())
+            .map_err(err),
         other => Err(format!("unknown direction {other}")),
     }
 }
 
 #[tauri::command]
-fn adopt_skill(state: State<AppState>, kind: ItemKind, id: String, project: PathBuf, target: Target) -> CmdResult<LockEntry> {
+fn adopt_skill(
+    state: State<AppState>,
+    kind: ItemKind,
+    id: String,
+    project: PathBuf,
+    target: Target,
+) -> CmdResult<LockEntry> {
     let lib = open_library(&state, kind)?;
     install::adopt(&lib, &id, &project, &target).map_err(err)
 }
@@ -287,7 +385,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .manage(AppState { config: Mutex::new(config) })
+        .manage(AppState {
+            config: Mutex::new(config),
+        })
         .invoke_handler(tauri::generate_handler![
             get_config,
             set_library,

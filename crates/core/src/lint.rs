@@ -43,14 +43,22 @@ pub fn lint_item(path: &Path, kind: ItemKind) -> Result<Vec<Issue>> {
             ItemKind::Skill => "SKILL.md is missing",
             ItemKind::Agent => "agent file is missing",
         };
-        issues.push(Issue { severity: Severity::Error, rule: "skill-file", message: what.into() });
+        issues.push(Issue {
+            severity: Severity::Error,
+            rule: "skill-file",
+            message: what.into(),
+        });
         return Ok(issues);
     }
     let text = fsutil::read_to_string(&md)?;
     let doc = match SkillDoc::parse(&text, &md) {
         Ok(d) => d,
         Err(e) => {
-            issues.push(Issue { severity: Severity::Error, rule: "frontmatter", message: e.to_string() });
+            issues.push(Issue {
+                severity: Severity::Error,
+                rule: "frontmatter",
+                message: e.to_string(),
+            });
             return Ok(issues);
         }
     };
@@ -67,40 +75,84 @@ pub fn lint_item(path: &Path, kind: ItemKind) -> Result<Vec<Issue>> {
     };
 
     if let Err(reason) = validate_id(id) {
-        issues.push(Issue { severity: Severity::Error, rule: "dir-name", message: format!("{holder} name `{id}`: {reason}") });
+        issues.push(Issue {
+            severity: Severity::Error,
+            rule: "dir-name",
+            message: format!("{holder} name `{id}`: {reason}"),
+        });
     }
     if meta.name.is_empty() {
-        issues.push(Issue { severity: Severity::Error, rule: "name", message: "`name` is missing".into() });
+        issues.push(Issue {
+            severity: Severity::Error,
+            rule: "name",
+            message: "`name` is missing".into(),
+        });
     } else if meta.name != id {
-        issues.push(Issue { severity: Severity::Error, rule: "name", message: format!("`name: {}` does not match {holder} `{id}`", meta.name) });
+        issues.push(Issue {
+            severity: Severity::Error,
+            rule: "name",
+            message: format!("`name: {}` does not match {holder} `{id}`", meta.name),
+        });
     }
     if meta.description.trim().is_empty() {
-        issues.push(Issue { severity: Severity::Error, rule: "description", message: "`description` is missing or empty".into() });
+        issues.push(Issue {
+            severity: Severity::Error,
+            rule: "description",
+            message: "`description` is missing or empty".into(),
+        });
     } else {
         let n = meta.description.chars().count();
         if n > MAX_DESCRIPTION {
-            issues.push(Issue { severity: Severity::Error, rule: "description", message: format!("description is {n} chars (max {MAX_DESCRIPTION})") });
+            issues.push(Issue {
+                severity: Severity::Error,
+                rule: "description",
+                message: format!("description is {n} chars (max {MAX_DESCRIPTION})"),
+            });
         } else if n < 40 {
-            issues.push(Issue { severity: Severity::Warning, rule: "description", message: "description is very short; say what it does and when to use it".into() });
+            issues.push(Issue {
+                severity: Severity::Warning,
+                rule: "description",
+                message: "description is very short; say what it does and when to use it".into(),
+            });
         }
     }
     if meta.tags.is_empty() {
-        issues.push(Issue { severity: Severity::Info, rule: "tags", message: "no tags".into() });
+        issues.push(Issue {
+            severity: Severity::Info,
+            rule: "tags",
+            message: "no tags".into(),
+        });
     }
     if meta.category.is_none() {
-        issues.push(Issue { severity: Severity::Info, rule: "category", message: "no category".into() });
+        issues.push(Issue {
+            severity: Severity::Info,
+            rule: "category",
+            message: "no category".into(),
+        });
     }
     for h in &meta.hosts {
         if !crate::targets::Target::is_known_host(h) {
-            issues.push(Issue { severity: Severity::Warning, rule: "hosts", message: format!("unknown host `{h}` (known: claude-code, codex, agents, amp, cursor, copilot)") });
+            issues.push(Issue {
+                severity: Severity::Warning,
+                rule: "hosts",
+                message: format!("unknown host `{h}` (known: claude-code, codex, agents, amp, cursor, copilot)"),
+            });
         }
     }
     if doc.body.trim().is_empty() {
-        issues.push(Issue { severity: Severity::Error, rule: "body", message: "the file has no body (system prompt / instructions)".into() });
+        issues.push(Issue {
+            severity: Severity::Error,
+            rule: "body",
+            message: "the file has no body (system prompt / instructions)".into(),
+        });
     } else {
         let lines = doc.body.lines().count();
         if kind == ItemKind::Skill && lines > RECOMMENDED_BODY_MAX_LINES {
-            issues.push(Issue { severity: Severity::Warning, rule: "body", message: format!("body is {lines} lines; consider moving material into references/") });
+            issues.push(Issue {
+                severity: Severity::Warning,
+                rule: "body",
+                message: format!("body is {lines} lines; consider moving material into references/"),
+            });
         }
     }
 
@@ -118,14 +170,22 @@ pub fn lint_item(path: &Path, kind: ItemKind) -> Result<Vec<Issue>> {
                 continue;
             }
             if !path.join(target).exists() {
-                issues.push(Issue { severity: Severity::Warning, rule: "link", message: format!("linked file not found: {target}") });
+                issues.push(Issue {
+                    severity: Severity::Warning,
+                    rule: "link",
+                    message: format!("linked file not found: {target}"),
+                });
             }
         }
         let path_re = Regex::new(r"`((?:scripts|references|assets|templates|tools)/[^`\s]+)`").unwrap();
         for cap in path_re.captures_iter(&doc.body) {
             let target = &cap[1];
             if !path.join(target).exists() {
-                issues.push(Issue { severity: Severity::Warning, rule: "link", message: format!("referenced file not found: {target}") });
+                issues.push(Issue {
+                    severity: Severity::Warning,
+                    rule: "link",
+                    message: format!("referenced file not found: {target}"),
+                });
             }
         }
     }
@@ -143,7 +203,11 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path().join("my-skill");
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("SKILL.md"), "---\nname: other\ndescription: short\n---\nSee [x](references/x.md) and `scripts/a.py`.\n").unwrap();
+        std::fs::write(
+            dir.join("SKILL.md"),
+            "---\nname: other\ndescription: short\n---\nSee [x](references/x.md) and `scripts/a.py`.\n",
+        )
+        .unwrap();
         let issues = lint_dir(&dir).unwrap();
         let rules: Vec<_> = issues.iter().map(|i| i.rule).collect();
         assert!(rules.contains(&"name"));
@@ -151,7 +215,11 @@ mod tests {
         assert_eq!(issues[0].severity, Severity::Error);
 
         let agent = tmp.path().join("coder.md");
-        std::fs::write(&agent, "---\nname: coder\ndescription: Implements code from a spec written by the orchestrator.\n---\n").unwrap();
+        std::fs::write(
+            &agent,
+            "---\nname: coder\ndescription: Implements code from a spec written by the orchestrator.\n---\n",
+        )
+        .unwrap();
         let issues = lint_item(&agent, ItemKind::Agent).unwrap();
         assert!(issues.iter().any(|i| i.rule == "body" && i.severity == Severity::Error));
         assert!(!issues.iter().any(|i| i.rule == "name"));
