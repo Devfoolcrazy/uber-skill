@@ -6,6 +6,8 @@ use std::process::{Command, Stdio};
 use crate::{Config, Error, Result};
 
 pub mod publication;
+pub mod sync;
+pub mod installation;
 
 static OPERATION_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 

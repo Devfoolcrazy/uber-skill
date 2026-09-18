@@ -8,6 +8,7 @@
   import SkillDetail from "$lib/components/SkillDetail.svelte";
   import ProjectDrawer from "$lib/components/ProjectDrawer.svelte";
   import SelectionBar from "$lib/components/SelectionBar.svelte";
+  import GitSyncDialog from "$lib/components/GitSyncDialog.svelte";
 
   onMount(() => {
     store.init();
@@ -27,6 +28,9 @@
 
 <ProjectDrawer />
 <SelectionBar />
+{#if store.gitDialog}
+  <GitSyncDialog request={store.gitDialog.install} onclose={() => (store.gitDialog = null)} />
+{/if}
 
 {#if store.error}
   <div class="banner error" role="alert">

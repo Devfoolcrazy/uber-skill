@@ -19,6 +19,15 @@ use crate::targets::Target;
 
 pub const LOCK_FILE: &str = ".uber-skill.lock.json";
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum SourceState {
+    Published,
+    LocalDraft,
+    UnpublishedCommit,
+    Unverified,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LockEntry {
     pub id: String,
@@ -27,6 +36,9 @@ pub struct LockEntry {
     /// Content hash at install time.
     pub hash: String,
     pub installed_at: String,
+    /// State of the source when installed through the Git verification flow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_state: Option<SourceState>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -124,6 +136,10 @@ pub fn host_mismatch(skill: &Skill, target: &Target) -> Option<String> {
 }
 
 pub fn install(skill: &Skill, project_root: &Path, target: &Target) -> Result<LockEntry> {
+    install_with_state(skill, project_root, target, None)
+}
+
+pub fn install_with_state(skill: &Skill, project_root: &Path, target: &Target, source_state: Option<SourceState>) -> Result<LockEntry> {
     let target_dir = target.dir_for(skill.kind, project_root)?;
     std::fs::create_dir_all(&target_dir).map_err(|e| Error::io(&target_dir, e))?;
     let dst = installed_path(&target_dir, &skill.id, skill.kind);
@@ -133,6 +149,7 @@ pub fn install(skill: &Skill, project_root: &Path, target: &Target) -> Result<Lo
         source: skill.path.clone(),
         hash: hash_path(&dst)?,
         installed_at: Utc::now().to_rfc3339(),
+        source_state,
     };
     let mut lock = LockFile::load(&target_dir)?;
     lock.skills.insert(skill.id.clone(), entry.clone());
@@ -316,7 +333,7 @@ pub fn sync_to_library(library: &Library, id: &str, project_root: &Path, target:
     let mut lock = LockFile::load(&target_dir)?;
     lock.skills.insert(
         id.to_string(),
-        LockEntry { id: id.to_string(), source: lib_path, hash: skill.hash.clone(), installed_at: Utc::now().to_rfc3339() },
+        LockEntry { id: id.to_string(), source: lib_path, hash: skill.hash.clone(), installed_at: Utc::now().to_rfc3339(), source_state: None },
     );
     lock.save(&target_dir)?;
     Ok(skill)
@@ -328,7 +345,7 @@ pub fn adopt(library: &Library, id: &str, project_root: &Path, target: &Target) 
     let target_dir = target.dir_for(kind, project_root)?;
     let inst = installed_path(&target_dir, id, kind);
     let skill = library.get(id)?;
-    let entry = LockEntry { id: id.to_string(), source: skill.path, hash: hash_path(&inst)?, installed_at: Utc::now().to_rfc3339() };
+    let entry = LockEntry { id: id.to_string(), source: skill.path, hash: hash_path(&inst)?, installed_at: Utc::now().to_rfc3339(), source_state: None };
     let mut lock = LockFile::load(&target_dir)?;
     lock.skills.insert(id.to_string(), entry.clone());
     lock.save(&target_dir)?;

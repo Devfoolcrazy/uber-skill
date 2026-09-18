@@ -35,15 +35,7 @@
 
   async function installHere() {
     if (!skill || !store.projectPath) return;
-    const id = skill.id;
-    const warnings = await api.checkHosts(store.kind, [id], store.target).catch(() => [] as string[]);
-    if (warnings.length > 0) {
-      const { confirm } = await import("@tauri-apps/plugin-dialog");
-      const ok = await confirm(`${warnings.join("\n")}\n\nInstaller quand même ?`, { title: "Harnais incompatible", kind: "warning" });
-      if (!ok) return;
-    }
-    await store.run(`${id} installé dans ${store.projectName}`, () => api.installSkills(store.kind, [id], store.projectPath!, store.target));
-    await store.refreshProject().catch(store.fail);
+    store.requestInstall([skill.id]);
   }
 
   const mainFile = (s: Skill) => (s.kind === "skill" ? "SKILL.md" : s.files[0]);

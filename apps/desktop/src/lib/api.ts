@@ -98,6 +98,7 @@ export interface LockEntry {
   source: string;
   hash: string;
   installed_at: string;
+  source_state?: SourceState;
 }
 export interface InstalledSkill {
   id: string;
@@ -139,6 +140,26 @@ export interface PublicationResult {
   push_error: string | null;
 }
 
+export type SourceState = "published" | "local-draft" | "unpublished-commit" | "unverified";
+export const SOURCE_LABEL: Record<SourceState, string> = {
+  published: "Version publiée",
+  "local-draft": "Brouillon local non publié",
+  "unpublished-commit": "Commit local non publié",
+  unverified: "Fraîcheur non vérifiée",
+};
+export interface GitSyncStatus {
+  root: string; branch: string | null; head: string | null;
+  remote: string | null; remote_ref: string | null; upstream_ref: string | null; remote_head: string | null;
+  ahead: number; behind: number; changed_files: string[];
+  verified: boolean; fetch_error: string | null; blocked: string | null; snapshot: string;
+}
+export interface InstallationPlan {
+  root: string; kind: ItemKind; target: Target;
+  items: { id: string; source: string; hash: string; source_state: SourceState }[];
+  git: GitSyncStatus | null; git_error: string | null; warnings: string[];
+}
+export interface InstallRequest { kind: ItemKind; ids: string[]; project: string; target: Target }
+
 export const api = {
   getConfig: () => invoke<Config>("get_config"),
   setLibrary: (path: string) => invoke<Config>("set_library", { path }),
@@ -146,6 +167,9 @@ export const api = {
   publicationPreview: () => invoke<PublicationPreview>("git_publication_preview"),
   publishLibrary: (snapshot: string, paths: string[], message: string) =>
     invoke<PublicationResult>("publish_library", { snapshot, paths, message }),
+  checkLibraryGit: () => invoke<GitSyncStatus>("check_library_git"),
+  updateLibraryGit: (snapshot: string) => invoke<GitSyncStatus>("update_library_git", { snapshot }),
+  prepareInstall: (kind: ItemKind, ids: string[], target: Target) => invoke<InstallationPlan>("prepare_install", { kind, ids, target }),
   setAgentsLibrary: (path: string | null) => invoke<Config>("set_agents_library", { path }),
   setEditor: (command: string | null) => invoke<Config>("set_editor", { command }),
   rememberProject: (path: string, target: Target) => invoke<Config>("remember_project", { path, target }),
@@ -167,8 +191,8 @@ export const api = {
   lintSkill: (kind: ItemKind, id: string) => invoke<Issue[]>("lint_skill", { kind, id }),
   projectStatus: (kind: ItemKind, project: string, target: Target) =>
     invoke<InstalledSkill[]>("project_status", { kind, project, target }),
-  installSkills: (kind: ItemKind, ids: string[], project: string, target: Target) =>
-    invoke<LockEntry[]>("install_skills", { kind, ids, project, target }),
+  installSkills: (plan: InstallationPlan, project: string) =>
+    invoke<LockEntry[]>("install_skills", { plan, project }),
   uninstallSkill: (kind: ItemKind, id: string, project: string, target: Target) =>
     invoke<void>("uninstall_skill", { kind, id, project, target }),
   diffInstalled: (kind: ItemKind, id: string, project: string, target: Target) =>

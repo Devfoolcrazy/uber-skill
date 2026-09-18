@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { confirm, open } from "@tauri-apps/plugin-dialog";
-  import { api, KIND_LABEL, targetDirFor } from "$lib/api";
+  import { open } from "@tauri-apps/plugin-dialog";
+  import { KIND_LABEL, targetDirFor } from "$lib/api";
   import { store } from "$lib/store.svelte";
 
   const n = $derived(store.checked.size);
@@ -13,19 +13,7 @@
       await store.setProject(dir);
       if (!store.projectPath) return;
     }
-    const ids = [...store.checked];
-    const warnings = await api.checkHosts(store.kind, ids, store.target).catch((e) => { store.fail(e); return [] as string[]; });
-    if (warnings.length > 0) {
-      const ok = await confirm(`${warnings.join("\n")}\n\nInstaller quand même ?`, { title: "Harnais incompatible", kind: "warning" });
-      if (!ok) return;
-    }
-    const r = await store.run(`${ids.length} skill(s) installé(s) dans ${store.projectName}`, () =>
-      api.installSkills(store.kind, ids, store.projectPath!, store.target),
-    );
-    if (r) {
-      store.checked = new Set();
-      await store.refreshProject().catch(store.fail);
-    }
+    store.requestInstall([...store.checked]);
   }
 </script>
 

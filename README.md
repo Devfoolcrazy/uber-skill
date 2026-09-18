@@ -109,6 +109,32 @@ Les branches sans suivi distant, HEAD détachée, opérations Git en cours, conf
 de sous-modules doivent être traités dans un outil Git externe. L’aperçu de publication utilise
 le dernier état distant connu localement.
 
+### Récupérer et vérifier avant installation
+
+**Récupérer…** vérifie la branche distante configurée et affiche les commits à récupérer,
+les commits locaux à publier et les fichiers modifiés. **Mettre à jour la bibliothèque** applique
+uniquement une avance rapide, sans fusion ni stash automatique. Git conserve les modifications
+locales compatibles et refuse la mise à jour si elles risquent d’être écrasées, y compris les fichiers
+ignorés. Une divergence ou une opération Git en cours doit être résolue dans un outil Git externe.
+Les modifications non enregistrées dans l’éditeur empêchent la mise à jour jusqu’à leur enregistrement.
+
+Chaque installation depuis l’application (unitaire, groupée, skill ou agent, réinstallation ou mise
+à jour depuis le tiroir « Installés ») ouvre le même contrôle :
+
+- **Installer la version locale** copie les fichiers présents dans la bibliothèque, y compris un brouillon.
+- **Mettre à jour puis installer** récupère la version distante, recharge les éléments choisis et les installe.
+- Si le réseau ou les accès Git empêchent la vérification, l’installation locale reste un choix explicite.
+- Si la mise à jour échoue, aucune installation ne suit automatiquement.
+
+Les changements de source depuis le contrôle imposent une nouvelle vérification avant copie.
+Le verrou conserve l’état de la source à l’installation (version publiée, brouillon local, commit
+non publié ou fraîcheur non vérifiée), affiché dans le tiroir « Installés ». Les anciens verrous
+restent lisibles. Le hash de contenu continue de servir à détecter les écarts projet/bibliothèque.
+
+Les commandes CLI conservent leur fonctionnement local existant ; le parcours décrit ici est celui
+de l’application de bureau. Remonter une copie projet vers la bibliothèque reste un enregistrement
+local ; sa publication Git est une action séparée.
+
 ## Tests
 
 ```sh

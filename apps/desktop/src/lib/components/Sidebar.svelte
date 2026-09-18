@@ -59,6 +59,7 @@
       <button class="small" disabled={!store.library || store.loading} onclick={() => store.run("Rechargé", () => store.refreshLibrary())}>Recharger</button>
     </div>
     <button class="small" style="margin-top:6px" disabled={!store.config?.library_path || store.loading} onclick={() => (publishOpen = true)}>Publier…</button>
+    <button class="small" style="margin-top:6px" disabled={!store.config?.library_path || store.loading} onclick={() => (store.gitDialog = {})}>Récupérer…</button>
     {#if store.kind === "agent" && store.config?.agents_path}
       <div class="muted path" style="margin-top:6px">Dossier d’agents personnalisé : {store.config.agents_path}</div>
     {/if}

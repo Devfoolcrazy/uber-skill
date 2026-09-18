@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { api, KIND_LABEL, targetDirFor, type FileDiff, type InstalledSkill } from "$lib/api";
+  import { api, KIND_LABEL, SOURCE_LABEL, targetDirFor, type FileDiff, type InstalledSkill } from "$lib/api";
   import { store, DRIFT_LABEL } from "$lib/store.svelte";
 
   let diff = $state<{ id: string; files: FileDiff[] } | null>(null);
@@ -23,18 +23,19 @@
   function actions(s: InstalledSkill) {
     const p = store.projectPath!;
     const t = store.target;
-    const a: { label: string; cls?: string; run: () => Promise<unknown> }[] = [];
-    if (s.state === "library-updated") a.push({ label: "Mettre à jour", cls: "primary", run: () => api.syncSkill(store.kind, s.id, "pull", p, t) });
+    const a: { label: string; cls?: string; install?: boolean; run: () => Promise<unknown> }[] = [];
+    const requestInstall = async () => { store.requestInstall([s.id]); };
+    if (s.state === "library-updated") a.push({ label: "Mettre à jour", cls: "primary", install: true, run: requestInstall });
     if (s.state === "project-modified") a.push({ label: "Remonter dans la bibliothèque", cls: "primary", run: () => api.syncSkill(store.kind, s.id, "push", p, t) });
     if (s.state === "conflict") {
-      a.push({ label: "Garder la bibliothèque", run: () => api.syncSkill(store.kind, s.id, "pull", p, t) });
+      a.push({ label: "Garder la bibliothèque", install: true, run: requestInstall });
       a.push({ label: "Garder le projet", run: () => api.syncSkill(store.kind, s.id, "push", p, t) });
     }
     if (s.state === "untracked") {
       if (store.skills.some((x) => x.id === s.id)) a.push({ label: "Lier à la bibliothèque", run: () => api.adoptSkill(store.kind, s.id, p, t) });
       else a.push({ label: "Importer dans la bibliothèque", run: () => api.importSkill(store.kind, s.path, null).then(() => api.adoptSkill(store.kind, s.id, p, t)) });
     }
-    if (s.state === "missing") a.push({ label: "Réinstaller", run: () => api.syncSkill(store.kind, s.id, "pull", p, t) });
+    if (s.state === "missing") a.push({ label: "Réinstaller", install: true, run: requestInstall });
     return a;
   }
 
@@ -83,9 +84,10 @@
             <span class="state muted">{DRIFT_LABEL[s.state]}</span>
           </div>
           {#if s.description}<div class="desc muted">{s.description}</div>{/if}
+          {#if s.lock?.source_state}<div class="muted">À l’installation : {SOURCE_LABEL[s.lock.source_state]}</div>{/if}
           <div class="wrap">
             {#each actions(s) as a}
-              <button class="small {a.cls ?? ''}" onclick={() => act(`${s.id} : ${a.label}`, a.run)}>{a.label}</button>
+              <button class="small {a.cls ?? ''}" onclick={() => a.install ? a.run() : act(`${s.id} : ${a.label}`, a.run)}>{a.label}</button>
             {/each}
             {#if ["library-updated", "project-modified", "conflict"].includes(s.state)}
               <button class="small" onclick={() => showDiff(s.id)}>Diff</button>

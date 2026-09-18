@@ -77,6 +77,24 @@ async fn publish_library(state: State<'_, AppState>, snapshot: String, paths: Ve
 }
 
 #[tauri::command]
+async fn check_library_git(state: State<'_, AppState>) -> CmdResult<git::sync::SyncStatus> {
+    let path = state.config.lock().map_err(err)?.library_path().map_err(err)?;
+    tauri::async_runtime::spawn_blocking(move || git::sync::check(&path)).await.map_err(err)?.map_err(err)
+}
+
+#[tauri::command]
+async fn update_library_git(state: State<'_, AppState>, snapshot: String) -> CmdResult<git::sync::SyncStatus> {
+    let path = state.config.lock().map_err(err)?.library_path().map_err(err)?;
+    tauri::async_runtime::spawn_blocking(move || git::sync::update(&path, &snapshot)).await.map_err(err)?.map_err(err)
+}
+
+#[tauri::command]
+async fn prepare_install(state: State<'_, AppState>, kind: ItemKind, ids: Vec<String>, target: Target) -> CmdResult<git::installation::InstallationPlan> {
+    let cfg = state.config.lock().map_err(err)?.clone();
+    tauri::async_runtime::spawn_blocking(move || git::installation::prepare(&cfg, kind, &ids, &target)).await.map_err(err)?.map_err(err)
+}
+
+#[tauri::command]
 fn set_agents_library(state: State<AppState>, path: Option<PathBuf>) -> CmdResult<Config> {
     if let Some(p) = &path {
         Library::open_kind(p, ItemKind::Agent).map_err(err)?;
@@ -198,14 +216,9 @@ fn project_status(state: State<AppState>, kind: ItemKind, project: PathBuf, targ
 }
 
 #[tauri::command]
-fn install_skills(state: State<AppState>, kind: ItemKind, ids: Vec<String>, project: PathBuf, target: Target) -> CmdResult<Vec<LockEntry>> {
-    let lib = open_library(&state, kind)?;
-    let mut out = Vec::new();
-    for id in ids {
-        let skill = lib.get(&id).map_err(err)?;
-        out.push(install::install(&skill, &project, &target).map_err(err)?);
-    }
-    Ok(out)
+async fn install_skills(state: State<'_, AppState>, plan: git::installation::InstallationPlan, project: PathBuf) -> CmdResult<Vec<LockEntry>> {
+    let cfg = state.config.lock().map_err(err)?.clone();
+    tauri::async_runtime::spawn_blocking(move || git::installation::install_prepared(&cfg, &plan, &project)).await.map_err(err)?.map_err(err)
 }
 
 #[tauri::command]
@@ -281,6 +294,9 @@ pub fn run() {
             clone_library,
             git_publication_preview,
             publish_library,
+            check_library_git,
+            update_library_git,
+            prepare_install,
             set_agents_library,
             set_editor,
             remember_project,

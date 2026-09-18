@@ -4,6 +4,7 @@ import {
   targetSupports,
   type Config,
   type InstalledSkill,
+  type InstallRequest,
   type ItemKind,
   type LibraryView,
   type Skill,
@@ -44,6 +45,19 @@ class AppStore {
   libraryBusy = $state(false);
   libraryGeneration = $state(0);
   editorDirty = $state(false);
+  gitDialog = $state<{ install?: InstallRequest } | null>(null);
+
+  requestInstall(ids: string[]) {
+    if (!this.projectPath || !this.targetOk) return;
+    this.gitDialog = { install: { kind: this.kind, ids, project: this.projectPath, target: this.target } };
+  }
+
+  async refreshAfterGit() {
+    await this.refreshLibrary("skill");
+    await this.refreshLibrary("agent");
+    this.libraryGeneration++;
+    await this.refreshProject();
+  }
 
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
