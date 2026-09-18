@@ -63,6 +63,20 @@ async fn clone_library(state: State<'_, AppState>, url: String, parent: PathBuf,
 }
 
 #[tauri::command]
+async fn git_publication_preview(state: State<'_, AppState>) -> CmdResult<git::publication::Preview> {
+    let path = state.config.lock().map_err(err)?.library_path().map_err(err)?;
+    tauri::async_runtime::spawn_blocking(move || git::publication::preview(&path))
+        .await.map_err(err)?.map_err(err)
+}
+
+#[tauri::command]
+async fn publish_library(state: State<'_, AppState>, snapshot: String, paths: Vec<String>, message: String) -> CmdResult<git::publication::PublicationResult> {
+    let path = state.config.lock().map_err(err)?.library_path().map_err(err)?;
+    tauri::async_runtime::spawn_blocking(move || git::publication::publish(&path, &snapshot, &paths, &message))
+        .await.map_err(err)?.map_err(err)
+}
+
+#[tauri::command]
 fn set_agents_library(state: State<AppState>, path: Option<PathBuf>) -> CmdResult<Config> {
     if let Some(p) = &path {
         Library::open_kind(p, ItemKind::Agent).map_err(err)?;
@@ -265,6 +279,8 @@ pub fn run() {
             get_config,
             set_library,
             clone_library,
+            git_publication_preview,
+            publish_library,
             set_agents_library,
             set_editor,
             remember_project,

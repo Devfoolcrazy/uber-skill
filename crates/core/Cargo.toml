@@ -17,6 +17,4 @@ similar.workspace = true
 directories.workspace = true
 chrono.workspace = true
 regex.workspace = true
-
-[dev-dependencies]
 tempfile.workspace = true

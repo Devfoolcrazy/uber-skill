@@ -87,6 +87,28 @@ personnalisé. Le choix est enregistré pour le prochain lancement. Un échec de
 de clonage conserve la bibliothèque précédente. Les bibliothèques de dossiers configurées
 avant cette évolution restent lisibles au démarrage.
 
+### Publier les modifications Git
+
+Le bouton **Publier…** ouvre l’aperçu des changements enregistrés sur disque, y compris
+ceux effectués hors de l’application. Cocher les fichiers à inclure, consulter leurs différences,
+adapter le message de commit prérempli puis cliquer sur **Commit et push**. Un renommage
+apparaît comme une suppression et un ajout : sélectionner les deux pour le publier entièrement.
+Les modifications non enregistrées dans l’éditeur ne sont pas incluses ; un rappel est affiché.
+
+La publication utilise la branche courante et sa branche distante de suivi déjà configurée.
+Les autres fichiers préparés dans Git restent exclus du commit et conservent leur préparation.
+Les commits locaux déjà en attente sont indiqués, car ils seront également envoyés.
+L’aperçu n’altère pas la préparation existante ; un changement depuis l’aperçu impose de l’actualiser.
+
+Si le commit réussit mais que le push échoue, le commit reste local et **Envoyer les commits**
+permet de réessayer sans nouveau commit. Aucun push forcé n’est effectué. L’identité de commit,
+les hooks et la signature utilisent la configuration Git de la machine. Un commit refusé laisse
+les fichiers sélectionnés préparés dans Git et n’est pas suivi d’un push.
+
+Les branches sans suivi distant, HEAD détachée, opérations Git en cours, conflits et changements
+de sous-modules doivent être traités dans un outil Git externe. L’aperçu de publication utilise
+le dernier état distant connu localement.
+
 ## Tests
 
 ```sh

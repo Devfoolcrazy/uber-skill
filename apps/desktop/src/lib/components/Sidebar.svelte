@@ -2,8 +2,10 @@
   import { store } from "$lib/store.svelte";
   import { hostKind, KIND_LABEL } from "$lib/api";
   import LibraryChooser from "./LibraryChooser.svelte";
+  import PublishLibrary from "./PublishLibrary.svelte";
 
   let libraryChooserOpen = $state(false);
+  let publishOpen = $state(false);
 
   function toggleTag(t: string) {
     store.selectedTags = store.selectedTags.includes(t)
@@ -56,6 +58,7 @@
       {/if}
       <button class="small" disabled={!store.library || store.loading} onclick={() => store.run("Rechargé", () => store.refreshLibrary())}>Recharger</button>
     </div>
+    <button class="small" style="margin-top:6px" disabled={!store.config?.library_path || store.loading} onclick={() => (publishOpen = true)}>Publier…</button>
     {#if store.kind === "agent" && store.config?.agents_path}
       <div class="muted path" style="margin-top:6px">Dossier d’agents personnalisé : {store.config.agents_path}</div>
     {/if}
@@ -144,6 +147,9 @@
 
 {#if libraryChooserOpen}
   <LibraryChooser onclose={() => (libraryChooserOpen = false)} />
+{/if}
+{#if publishOpen}
+  <PublishLibrary onclose={() => (publishOpen = false)} />
 {/if}
 
 <style>

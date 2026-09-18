@@ -5,6 +5,10 @@ use std::process::{Command, Stdio};
 
 use crate::{Config, Error, Result};
 
+pub mod publication;
+
+static OPERATION_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn command() -> Command {
     let mut cmd = Command::new("git");
     // Do not inherit a repository selected by the launching shell.

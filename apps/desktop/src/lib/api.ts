@@ -120,10 +120,32 @@ export interface Issue {
   message: string;
 }
 
+export interface PublicationPreview {
+  root: string;
+  branch: string | null;
+  head: string | null;
+  remote: string | null;
+  remote_branch: string | null;
+  pending_count: number;
+  pending_commits: string[];
+  files: { path: string; status: string; diff: string }[];
+  snapshot: string;
+  blocked: string | null;
+}
+
+export interface PublicationResult {
+  commit: string | null;
+  pushed: boolean;
+  push_error: string | null;
+}
+
 export const api = {
   getConfig: () => invoke<Config>("get_config"),
   setLibrary: (path: string) => invoke<Config>("set_library", { path }),
   cloneLibrary: (url: string, parent: string, name: string) => invoke<Config>("clone_library", { url, parent, name }),
+  publicationPreview: () => invoke<PublicationPreview>("git_publication_preview"),
+  publishLibrary: (snapshot: string, paths: string[], message: string) =>
+    invoke<PublicationResult>("publish_library", { snapshot, paths, message }),
   setAgentsLibrary: (path: string | null) => invoke<Config>("set_agents_library", { path }),
   setEditor: (command: string | null) => invoke<Config>("set_editor", { command }),
   rememberProject: (path: string, target: Target) => invoke<Config>("remember_project", { path, target }),
