@@ -4,6 +4,7 @@
   import { api, splitFrontmatter, type Issue, type Skill } from "$lib/api";
   import { store, DRIFT_LABEL } from "$lib/store.svelte";
   import MetaFields from "./MetaFields.svelte";
+  import RefineDialog from "./RefineDialog.svelte";
 
   type Tab = "preview" | "edit" | "files" | "lint";
   let tab = $state<Tab>("preview");
@@ -32,6 +33,7 @@
 
   let issues = $state<Issue[] | null>(null);
   let confirmDelete = $state(false);
+  let refineOpen = $state(false);
   const installed = $derived(skill ? store.statusOf(skill.id) : undefined);
 
   async function installHere() {
@@ -98,6 +100,13 @@
     if (store.statusOf(id)?.state === "library-updated") {
       store.notify(`Enregistré. La copie dans ${store.projectName} est en retard : « Mettre à jour la copie du projet ».`);
     }
+  }
+
+  async function refined(s: Skill) {
+    store.replaceSkill(s);
+    issues = null;
+    await load(s, mainFile(s));
+    await projectCopyChanged(s.id);
   }
 
   function openMeta() {
@@ -176,6 +185,9 @@
         {/if}
         <button class="small" onclick={() => api.openInEditor(skill!.path).catch(store.fail)}>Ouvrir dans l'éditeur</button>
         <button class="small" onclick={openMeta}>Tags & catégorie</button>
+        {#if skill.kind === "skill"}
+          <button class="small" disabled={dirty || metaDirty} title={dirty || metaDirty ? "Enregistrez vos modifications avant de raffiner" : "Proposer une amélioration de SKILL.md avec Claude"} onclick={() => (refineOpen = true)}>Raffiner…</button>
+        {/if}
         {#if !confirmDelete}
           <button class="small danger" onclick={() => (confirmDelete = true)}>Supprimer</button>
         {:else}
@@ -256,6 +268,10 @@
       {/if}
     </div>
   </div>
+{/if}
+
+{#if refineOpen && skill}
+  <RefineDialog {skill} onaccepted={refined} onclose={() => (refineOpen = false)} />
 {/if}
 
 <style>

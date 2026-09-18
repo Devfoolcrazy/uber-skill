@@ -54,6 +54,12 @@ const MESSAGES: Record<string, string> = {
   "git-unexpected-output": "Réponse inattendue de Git.",
   "git-stale": "L’état a changé depuis la vérification. Actualisez avant de continuer.",
 
+  "refine.claude-not-found": "La commande « claude » est introuvable. Installez Claude Code et connectez-vous, ou indiquez son chemin avec la variable UBER_SKILL_CLAUDE.",
+  "refine.claude-failed": "Claude n’a pas pu répondre. Vérifiez que « claude » fonctionne dans un terminal et que vous y êtes connecté.",
+  "refine.timeout": "Claude n’a pas répondu à temps. Réessayez, éventuellement avec une consigne plus ciblée.",
+  "refine.invalid-answer": "La réponse de Claude n’est pas un SKILL.md valide. Rien n’a été modifié ; réessayez.",
+  "refine.empty-instruction": "Indiquez ce que Claude doit améliorer.",
+
   "input.not-repository-root": "Choisissez la racine du dépôt Git.",
   "input.clone-url": "Indiquez une URL de dépôt Git valide.",
   "input.clone-name": "Indiquez un nom de dossier simple, sans séparateur de chemin.",

@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand};
+use uber_skill_core::refine;
 use uber_skill_core::registry::{self, Facet, OnUsed};
 use uber_skill_core::{
     git, install, lint, search, Config, DriftState, ItemKind, Library, Query, Registry, RegistryView, Target,
@@ -104,6 +105,16 @@ enum Cmd {
         path: PathBuf,
         #[arg(long)]
         r#as: Option<String>,
+    },
+    /// Ask Claude (`claude -p`) to improve a SKILL.md; shows a diff, writes only with --apply
+    Refine {
+        id: String,
+        /// What to improve, e.g. "clarify the steps and add an example"
+        #[arg(short, long)]
+        message: String,
+        /// Write the proposal to the library (a local save: no commit, no push)
+        #[arg(long)]
+        apply: bool,
     },
     /// Lint one skill or the whole library
     Lint { id: Option<String> },
@@ -505,6 +516,27 @@ fn main() -> Result<()> {
             let lib = open_library(&cli)?;
             let s = lib.import(path, r#as.as_deref())?;
             println!("imported {} -> {}", s.id, s.path.display());
+        }
+        Cmd::Refine { id, message, apply } => {
+            let lib = open_library(&cli)?;
+            let proposal = refine::propose(&lib, id, message)?;
+            if cli.json {
+                print_json(&proposal)?;
+            } else if proposal.diff.is_empty() {
+                println!("no change proposed");
+            } else {
+                print!("{}", proposal.diff);
+            }
+            if !proposal.restored_keys.is_empty() {
+                eprintln!(
+                    "locked frontmatter keys put back: {}",
+                    proposal.restored_keys.join(", ")
+                );
+            }
+            if *apply && !proposal.diff.is_empty() {
+                refine::accept(&lib, &proposal)?;
+                eprintln!("applied to {id} (not committed)");
+            }
         }
         Cmd::Lint { id } => {
             let lib = open_library(&cli)?;

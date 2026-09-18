@@ -165,6 +165,25 @@ aussitôt dans l’éditeur. Rien n’est écrasé : un nom déjà pris est refu
 qui n’est pas un skill ou un agent. Le brouillon reste local jusqu’à **Publier…**. La commande CLI `new`
 utilise les mêmes modèles.
 
+### Raffiner un skill avec Claude
+
+**Raffiner…** (détail d’un skill) envoie le texte de `SKILL.md` à Claude avec une consigne libre, par exemple
+« clarifie les étapes et ajoute un exemple », puis affiche la proposition sous forme de différences.
+**Accepter** enregistre le fichier localement, sans commit ni push ; **Rejeter** ne touche à rien. Si le
+fichier a changé entre-temps, l’acceptation est refusée.
+
+- Fonction facultative : elle utilise la commande `claude` de Claude Code en mode non interactif (`claude -p`),
+  avec le modèle par défaut et l’authentification de votre installation. Si elle est introuvable ou non
+  connectée, un message l’explique. `UBER_SKILL_CLAUDE` permet d’indiquer un autre exécutable.
+- Claude s’exécute sans aucun outil, hors de la bibliothèque, et ne reçoit que `SKILL.md` : les scripts et
+  autres fichiers du skill ne sont pas analysés.
+- La proposition peut modifier le corps et la `description`. Le nom, les tags, la catégorie, les harnais et
+  toutes les autres clés du frontmatter sont verrouillés : s’ils reviennent modifiés, ils sont rétablis et
+  l’application le signale.
+- Ni le raffinement ni le lint ne valident le comportement d’un skill : essayez-le dans un projet.
+
+En ligne de commande : `uber-skill refine <id> -m "consigne"` affiche le diff, `--apply` l’enregistre.
+
 ### Tags et catégories
 
 **Tags et catégories…** (barre latérale, ou ⚙ › Bibliothèque) administre le référentiel : ajouter une

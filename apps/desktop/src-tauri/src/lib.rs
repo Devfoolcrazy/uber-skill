@@ -5,6 +5,7 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
+use uber_skill_core::refine;
 use uber_skill_core::registry::{self, Facet, OnUsed};
 use uber_skill_core::{
     git, install, lint, search, Config, Error, ErrorPayload, FileDiff, InstalledSkill, Issue, ItemKind, Library,
@@ -161,6 +162,26 @@ async fn prepare_install(
         .await
         .map_err(err)?
         .map_err(err)
+}
+
+/// Ask Claude for an improved SKILL.md. Runs off the UI thread: it takes tens of seconds.
+#[tauri::command]
+async fn refine_propose(
+    state: State<'_, AppState>,
+    kind: ItemKind,
+    id: String,
+    instruction: String,
+) -> CmdResult<refine::Proposal> {
+    let lib = open_library(&state, kind)?;
+    tauri::async_runtime::spawn_blocking(move || refine::propose(&lib, &id, &instruction))
+        .await
+        .map_err(err)?
+        .map_err(err)
+}
+
+#[tauri::command]
+fn refine_accept(state: State<AppState>, kind: ItemKind, proposal: refine::Proposal) -> CmdResult<Skill> {
+    refine::accept(&open_library(&state, kind)?, &proposal).map_err(err)
 }
 
 #[tauri::command]
@@ -460,6 +481,8 @@ pub fn run() {
             check_library_git,
             update_library_git,
             prepare_install,
+            refine_propose,
+            refine_accept,
             get_registry,
             registry_init,
             registry_add,

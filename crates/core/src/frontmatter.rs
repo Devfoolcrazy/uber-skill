@@ -317,6 +317,46 @@ impl SkillDoc {
         next.to_text()
     }
 
+    /// Text of the document with a new description, touching only its line when
+    /// it is a plain one-line value; otherwise the frontmatter is re-serialized.
+    pub fn text_with_description(&self, text: &str, description: &str) -> Result<String> {
+        let mut next = self.clone();
+        next.set_str("description", description);
+        let patched = scalar(description).and_then(|value| {
+            let mut found = false;
+            let mut in_front = false;
+            let mut lines = Vec::new();
+            for (n, line) in text.split_inclusive('\n').enumerate() {
+                let bare = line.trim_end_matches(['\r', '\n']);
+                if bare == "---" {
+                    in_front = n == 0;
+                } else if in_front && !found {
+                    if let Some(current) = bare.strip_prefix("description:") {
+                        let current = current.trim();
+                        if current.is_empty()
+                            || current.starts_with(['|', '>', '&', '*', '#'])
+                            || current.contains(" #")
+                        {
+                            return None;
+                        }
+                        found = true;
+                        lines.push(format!("description: {value}{}", &line[bare.len()..]));
+                        continue;
+                    }
+                }
+                lines.push(line.to_string());
+            }
+            found.then(|| lines.concat())
+        });
+        if let Some(patched) = patched {
+            let reparsed = SkillDoc::parse(&patched, Path::new("")).ok();
+            if reparsed.is_some_and(|d| d.front == next.front && d.body == next.body) {
+                return Ok(patched);
+            }
+        }
+        next.to_text()
+    }
+
     pub fn set_str(&mut self, k: &str, v: &str) {
         self.front.insert(key(k), Value::String(v.to_string()));
     }

@@ -84,6 +84,21 @@ pub enum InputError {
     RegistryValueInUse(String),
 }
 
+/// Why an assisted rewrite through the Claude Code CLI did not produce a proposal.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum RefineError {
+    #[error("the `claude` command was not found")]
+    ClaudeNotFound,
+    #[error("claude failed: {0}")]
+    ClaudeFailed(String),
+    #[error("claude did not answer in time")]
+    Timeout,
+    #[error("claude did not return a valid SKILL.md: {0}")]
+    InvalidAnswer(String),
+    #[error("empty request")]
+    EmptyInstruction,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("io error at {path}: {source}")]
@@ -115,6 +130,8 @@ pub enum Error {
     GitBlocked(BlockReason),
     #[error("{0}")]
     InvalidInput(InputError),
+    #[error("{0}")]
+    Refine(RefineError),
     #[error("not a directory: {0}")]
     NotADirectory(PathBuf),
     #[error("json error: {0}")]
@@ -181,6 +198,13 @@ impl Error {
                 InputError::RegistryValue(_) => "input.registry-value",
                 InputError::RegistryValueInUse(_) => "input.registry-value-in-use",
             },
+            Error::Refine(refine) => match refine {
+                RefineError::ClaudeNotFound => "refine.claude-not-found",
+                RefineError::ClaudeFailed(_) => "refine.claude-failed",
+                RefineError::Timeout => "refine.timeout",
+                RefineError::InvalidAnswer(_) => "refine.invalid-answer",
+                RefineError::EmptyInstruction => "refine.empty-instruction",
+            },
             Error::NotADirectory(_) => "not-a-directory",
             Error::Json(_) => "json",
             Error::Yaml(_) => "yaml",
@@ -204,6 +228,10 @@ impl Error {
             Error::InvalidInput(InputError::RegistryValue(value) | InputError::RegistryValueInUse(value)) => {
                 Some(value.clone())
             }
+            Error::Refine(RefineError::ClaudeFailed(why) | RefineError::InvalidAnswer(why)) => {
+                Some(why.clone()).filter(|w| !w.is_empty())
+            }
+            Error::Refine(_) => None,
             Error::NotADirectory(path) => Some(path.display().to_string()),
             Error::Json(e) => Some(e.to_string()),
             Error::Yaml(e) => Some(e.to_string()),
@@ -303,6 +331,15 @@ mod tests {
             InputError::RegistryValueInUse("git".into()),
         ] {
             all.push(Error::InvalidInput(input));
+        }
+        for refine in [
+            RefineError::ClaudeNotFound,
+            RefineError::ClaudeFailed("please run /login".into()),
+            RefineError::Timeout,
+            RefineError::InvalidAnswer("no frontmatter".into()),
+            RefineError::EmptyInstruction,
+        ] {
+            all.push(Error::Refine(refine));
         }
         all
     }

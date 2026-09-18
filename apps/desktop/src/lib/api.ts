@@ -161,6 +161,7 @@ export interface InstallationPlan {
   items: { id: string; source: string; hash: string; source_state: SourceState }[];
   git: GitSyncStatus | null; git_error: ErrorPayload | null; warnings: HostMismatch[];
 }
+export interface RefineProposal { id: string; original: string; proposed: string; diff: string; restored_keys: string[] }
 export type Facet = "category" | "tag";
 export interface ValueUsage { value: string; known: boolean; items: { kind: ItemKind; id: string }[] }
 export interface RegistryView { path: string; exists: boolean; categories: ValueUsage[]; tags: ValueUsage[] }
@@ -176,6 +177,9 @@ export const api = {
   checkLibraryGit: () => invoke<GitSyncStatus>("check_library_git"),
   updateLibraryGit: (snapshot: string) => invoke<GitSyncStatus>("update_library_git", { snapshot }),
   prepareInstall: (kind: ItemKind, ids: string[], target: Target) => invoke<InstallationPlan>("prepare_install", { kind, ids, target }),
+  refinePropose: (kind: ItemKind, id: string, instruction: string) =>
+    invoke<RefineProposal>("refine_propose", { kind, id, instruction }),
+  refineAccept: (kind: ItemKind, proposal: RefineProposal) => invoke<Skill>("refine_accept", { kind, proposal }),
   getRegistry: () => invoke<RegistryView>("get_registry"),
   registryInit: () => invoke<RegistryView>("registry_init"),
   registryAdd: (facet: Facet, value: string) => invoke<RegistryView>("registry_add", { facet, value }),

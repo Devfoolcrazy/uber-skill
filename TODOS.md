@@ -9,7 +9,7 @@ Avancer étape par étape : chaque livraison doit être testée par l’utilisat
 3. **Récupération Git et vérification de fraîcheur avant installation : implémentées et validées par l’utilisateur.** Fetch de la branche distante configurée, compteur de commits locaux/distants, mise à jour en avance rapide et choix explicite d’une installation locale. Contrôle commun aux installations unitaires, groupées, agents et réinstallations depuis le tiroir.
 4. **Référentiel de tags/catégories et administration : implémentés et validés par l’utilisateur.** Fichier `uber-skill.yaml` versionné à la racine, commun aux skills et agents, tolérant aux valeurs inconnues ; page « Tags et catégories » (ajout, renommage partout, suppression avec remplacement ou retrait explicite, mise en correspondance des valeurs inconnues) ; sélecteurs dans l’éditeur et le formulaire de création ; avertissements de lint ; commandes CLI `registry`.
 5. **Création de skills/agents avec templates intégrés : implémentée et validée par l’utilisateur.** Modèles distincts dans `crates/core/src/templates/`, refus d’écraser quoi que ce soit, ouverture immédiate du brouillon dans l’éditeur.
-6. Raffinement assisté du `SKILL.md` : à implémenter.
+6. **Raffinement assisté du `SKILL.md` : implémenté, en attente du test utilisateur.** `claude -p` sans outil ni session, modèle par défaut du CLI ; la proposition peut modifier le corps et la description, le reste du frontmatter est verrouillé ; diff, puis acceptation ou rejet explicites.
 7. Passe UI/UX : après validation du fonctionnel.
 
 ### Test utilisateur de l’étape 1
@@ -65,6 +65,21 @@ Vérifications effectuées : suite Rust complète (44 tests, dont un sur les mod
 - Vérifier l’onglet Lint du brouillon : aucun problème bloquant.
 
 Limites de cette étape : les modèles sont intégrés à l’application et en français ; leur personnalisation depuis le dépôt reste une évolution possible.
+
+### Test utilisateur de l’étape 6
+
+Vérifications effectuées : suite Rust complète (49 tests, dont 5 sur le raffinement avec un faux exécutable `claude` : arguments, entrée, dossier d’exécution, erreurs, fichier modifié entre-temps), `pnpm check` sans erreur ni avertissement, 42 tests d’interface (dont le dialogue de raffinement), et un raffinement réel en ligne de commande sur un skill temporaire (environ 20 secondes, commentaire YAML et métadonnées préservés, fichier intact avant acceptation). L’interface n’a pas été essayée dans l’application réelle.
+
+- Ouvrir un skill, cliquer sur « Raffiner… », saisir une consigne ou choisir une suggestion, puis « Proposer » : vérifier le message d’attente, puis le diff.
+- Vérifier que le fichier n’est pas modifié tant que la proposition n’est pas acceptée, puis « Rejeter » : rien ne change.
+- « Accepter » : le fichier est enregistré, l’éditeur affiche le nouveau texte, l’élément apparaît dans « Publier… » et, s’il est installé dans le projet courant, « Mettre à jour la copie du projet » est proposé.
+- Vérifier que le nom, les tags, la catégorie et les harnais sont inchangés après acceptation, même avec une consigne demandant de les modifier (« renomme ce skill ») : la proposition doit signaler les clés rétablies.
+- « Abandonner » pendant l’attente, puis relancer avec une autre consigne.
+- Avec des modifications non enregistrées dans l’éditeur : « Raffiner… » doit être désactivé.
+- Lancer l’application depuis le Finder (et non depuis un terminal) pour vérifier que `claude` est bien trouvé.
+- Vérifier que « Raffiner… » n’apparaît pas pour un agent.
+
+Limites de cette étape : skills uniquement, fichier `SKILL.md` uniquement ; l’appel ne peut pas être interrompu côté Claude (« Abandonner » ignore sa réponse) ; délai maximal de 5 minutes ; pas de choix du modèle dans l’application.
 
 ## Bibliothèque Git et installation
 
@@ -148,7 +163,7 @@ Précisions : la copie porte sur les fichiers enregistrés sur disque ; chaque l
 
 ### Modalités techniques à préciser
 
-- Envisager `claude -p` en mode headless ; préciser les prérequis, les paramètres d’exécution et la gestion des erreurs lors de la spécification technique.
+- Retenu : `claude -p --output-format json --tools "" --strict-mcp-config --no-session-persistence`, consigne et fichier transmis sur l’entrée standard, exécution dans un dossier temporaire vide, modèle par défaut du CLI (décision utilisateur), périmètre « corps + description » avec verrouillage du reste du frontmatter (décision utilisateur). Erreurs distinguées : commande introuvable, échec ou absence de connexion, délai dépassé, réponse qui n’est pas un `SKILL.md` valide, consigne vide.
 
 ### Évolution possible, hors première version
 
