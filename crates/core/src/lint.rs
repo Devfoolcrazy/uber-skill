@@ -158,24 +158,16 @@ pub fn lint_item(path: &Path, kind: ItemKind) -> Result<Vec<Issue>> {
     }
 
     if kind == ItemKind::Skill {
-        // Relative links and code-spanned paths that should exist in the skill folder.
-        let link_re = Regex::new(r"\]\(([^)\s#]+)\)").unwrap();
-        for cap in link_re.captures_iter(&doc.body) {
-            let target = &cap[1];
-            if target.contains("://")
-                || target.starts_with('/')
-                || target.starts_with("mailto:")
-                || target.contains('<')
-                || target.contains('{')
-            {
-                continue;
-            }
-            if !path.join(target).exists() {
-                issues.push(Issue {
-                    severity: Severity::Warning,
-                    rule: "link",
-                    message: format!("linked file not found: {target}"),
-                });
+        // Relative links of every markdown file, and code-spanned paths of SKILL.md,
+        // should exist in the skill folder.
+        let files = fsutil::list_files(path)?;
+        check_links(path, &files, Path::new(""), &doc.body, &mut issues);
+        for file in files
+            .iter()
+            .filter(|f| f.extension().is_some_and(|e| e == "md") && path.join(f) != md)
+        {
+            if let Ok(text) = fsutil::read_to_string(&path.join(file)) {
+                check_links(path, &files, file, &text, &mut issues);
             }
         }
         let path_re = Regex::new(r"`((?:scripts|references|assets|templates|tools)/[^`\s]+)`").unwrap();
@@ -193,6 +185,42 @@ pub fn lint_item(path: &Path, kind: ItemKind) -> Result<Vec<Issue>> {
 
     issues.sort_by_key(|i| std::cmp::Reverse(i.severity));
     Ok(issues)
+}
+
+/// Report relative links of `text` (the markdown file `file`, relative to the
+/// skill) that lead nowhere, suggesting a file of the same name when there is one.
+fn check_links(skill: &Path, files: &[std::path::PathBuf], file: &Path, text: &str, issues: &mut Vec<Issue>) {
+    let link_re = Regex::new(r"\]\(([^)\s#]+)(?:#[^)\s]*)?\)").unwrap();
+    let base = file.parent().unwrap_or(Path::new(""));
+    for cap in link_re.captures_iter(text) {
+        let target = &cap[1];
+        if target.contains(':') || target.starts_with('/') || target.contains('<') || target.contains('{') {
+            continue;
+        }
+        if skill.join(base).join(target).exists() {
+            continue;
+        }
+        let name = Path::new(target).file_name();
+        let suggestion = files
+            .iter()
+            .find(|f| f.file_name() == name)
+            .map(|f| {
+                // Written from the linking file: climb out of its folder, then down to the match.
+                let up = "../".repeat(base.components().count());
+                format!("; did you mean {up}{}?", f.display())
+            })
+            .unwrap_or_default();
+        let origin = if file.as_os_str().is_empty() {
+            String::new()
+        } else {
+            format!(" (in {})", file.display())
+        };
+        issues.push(Issue {
+            severity: Severity::Warning,
+            rule: "link",
+            message: format!("linked file not found: {target}{origin}{suggestion}"),
+        });
+    }
 }
 
 /// Values the library's registry does not list. Warnings only: the registry
@@ -216,6 +244,39 @@ pub fn lint_registry(item: &Skill, registry: &Registry) -> Vec<Issue> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checks_links_of_every_markdown_file_relative_to_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("forecasting");
+        std::fs::create_dir_all(dir.join("chapters")).unwrap();
+        std::fs::write(
+            dir.join("SKILL.md"),
+            "---\nname: forecasting\ndescription: Forecast time series with sound statistical methods.\n---\nSee [the cheatsheet](cheatsheet.md#rules), [the site](https://example.com) and [chapter one](ch01.md).\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("cheatsheet.md"), "Go to [chapter one](chapters/ch01.md).\n").unwrap();
+        std::fs::write(
+            dir.join("chapters/ch01.md"),
+            "Back to [the cheatsheet](../cheatsheet.md) or [the glossary](glossary.md).\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("glossary.md"), "Terms.\n").unwrap();
+
+        let links: Vec<String> = lint_dir(&dir)
+            .unwrap()
+            .into_iter()
+            .filter(|i| i.rule == "link")
+            .map(|i| i.message)
+            .collect();
+        assert_eq!(
+            links,
+            [
+                "linked file not found: ch01.md; did you mean chapters/ch01.md?",
+                "linked file not found: glossary.md (in chapters/ch01.md); did you mean ../glossary.md?",
+            ]
+        );
+    }
 
     #[test]
     fn detects_common_problems() {

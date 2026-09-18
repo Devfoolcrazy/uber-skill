@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import { marked } from "marked";
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import { api, splitFrontmatter, type Issue, type Skill } from "$lib/api";
   import { store, DRIFT_LABEL } from "$lib/store.svelte";
   import GitBadge from "./GitBadge.svelte";
@@ -78,11 +79,45 @@
     }
   });
 
+  const isMarkdown = $derived(/\.(md|markdown)$/i.test(currentFile));
   const preview = $derived.by(() => {
-    if (!skill || !isMain) return "";
-    const { body } = splitFrontmatter(text);
+    if (!skill || !isMarkdown) return "";
+    const body = isMain ? splitFrontmatter(text).body : text;
     return marked.parse(body, { async: false }) as string;
   });
+
+  /// Path of a relative link inside the skill, from the file being previewed; null when it escapes the skill.
+  function linkedFile(href: string): string | null {
+    const target = decodeURIComponent(href.split(/[?#]/)[0]);
+    const parts = currentFile.split("/").slice(0, -1);
+    for (const part of target.split("/")) {
+      if (part === "" || part === ".") continue;
+      if (part === "..") {
+        if (parts.length === 0) return null;
+        parts.pop();
+      } else parts.push(part);
+    }
+    return parts.join("/");
+  }
+
+  /// Links of the preview never navigate the app window: a file of the skill opens
+  /// here, a web address opens in the browser.
+  async function followLink(e: MouseEvent) {
+    const anchor = (e.target as HTMLElement).closest("a");
+    const href = anchor?.getAttribute("href");
+    if (!anchor || !href || !skill) return;
+    e.preventDefault();
+    if (href.startsWith("#")) {
+      document.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView({ behavior: "smooth" });
+    } else if (/^[a-z][a-z0-9+.-]*:/i.test(href)) {
+      if (/^(https?|mailto):/i.test(href)) await openUrl(href).catch(store.fail);
+    } else {
+      const file = href.startsWith("/") ? null : linkedFile(href);
+      if (!file || !skill.files.includes(file)) store.fail(`Lien introuvable dans ce skill : ${href}`);
+      else if (dirty) store.fail("Enregistrez vos modifications avant d’ouvrir un autre fichier.");
+      else await load(skill, file);
+    }
+  }
 
   async function save() {
     if (!skill || !dirty) return;
@@ -235,10 +270,15 @@
 
     <div class="body">
       {#if tab === "preview"}
-        {#if !isMain}
+        {#if skill && !isMain}
+          <button class="small back" onclick={() => { if (dirty) store.fail("Enregistrez vos modifications avant d’ouvrir un autre fichier."); else load(skill!, mainFile(skill!)); }}>← {mainFile(skill)}</button>
+          <span class="muted selectable">{currentFile}</span>
+        {/if}
+        {#if !isMarkdown}
           <pre class="file">{text}</pre>
         {:else}
-          <article class="md selectable">{@html preview}</article>
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+          <article class="md selectable" onclick={followLink}>{@html preview}</article>
         {/if}
       {:else if tab === "edit"}
         {#if isText(currentFile)}
@@ -303,6 +343,9 @@
   .desc {
     margin: 0;
     color: var(--muted);
+  }
+  .back {
+    margin: 0 8px 10px 0;
   }
   .chip.unknown {
     outline: 1px dashed var(--warn);

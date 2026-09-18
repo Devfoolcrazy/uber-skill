@@ -20,7 +20,7 @@ apps/desktop     app Tauri v2 + SvelteKit
 - **Dérive** : à partir du verrou, chaque skill installé est `up-to-date`, `library-updated`, `project-modified`, `conflict`, `untracked`, `missing` ou `source-missing`. On peut voir le diff, tirer la version bibliothèque (`pull`) ou remonter la version projet (`push`).
 - **Harnais** : un skill est universel par défaut. S'il dépend d'un outil (frontmatter `allowed-tools`, outils MCP, sous-agents…), on le déclare dans `metadata.hosts` (`claude-code`, `codex`, `cursor`, `copilot`). L'app filtre dessus et avertit à l'installation si la cible ne correspond pas.
 - **Référentiel** : `uber-skill.yaml` à la racine de la bibliothèque liste les catégories et tags autorisés, communs aux skills et aux agents, et versionnés avec eux. Il est tolérant : une valeur absente du référentiel ne bloque ni le scan, ni l'import, ni l'édition ; elle est seulement signalée comme inconnue. Sans ce fichier, toutes les valeurs sont acceptées.
-- **Lint** : nom = dossier, description présente et < 1024 caractères, corps non vide, liens relatifs existants, hosts connus, catégorie et tags présents dans le référentiel (avertissement).
+- **Lint** : nom = dossier, description présente et < 1024 caractères, corps non vide, liens relatifs existants dans tous les fichiers Markdown du skill (avec suggestion quand un fichier du même nom existe ailleurs), hosts connus, catégorie et tags présents dans le référentiel (avertissement).
 
 Frontmatter reconnu :
 
@@ -84,6 +84,7 @@ pnpm tauri dev
 
 Barre du haut : bascule Skills / Agents, sélecteur de projet et de cible, bouton « Installés » avec badge de dérive, réglages.
 Colonnes : filtres (catégories, tags, harnais) · liste avec recherche et cases à cocher · détail (aperçu markdown, éditeur ⌘S, fichiers, lint, tags & catégorie).
+Dans l'aperçu, un lien vers un fichier du skill l'ouvre sur place (rendu Markdown, retour vers `SKILL.md`), un lien web s'ouvre dans le navigateur, un lien cassé est signalé sans quitter l'écran.
 Barre flottante quand des éléments sont cochés : installation dans le projet courant. Tiroir « Installés » : état de dérive, diff, pull/push, retirer.
 
 ### Deux synchronisations distinctes
