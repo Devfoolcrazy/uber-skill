@@ -79,7 +79,7 @@ describe("requestInstall", () => {
 
 describe("openLibrary", () => {
   it("keeps the previous library and selection when opening fails", async () => {
-    bridge({ set_library: () => { throw "Choisissez la racine du dépôt Git : /repo"; } });
+    bridge({ set_library: () => { throw { code: "input.not-repository-root", message: "not the root", details: "/repo" }; } });
     const previous = libraryView([skill("one")]);
     store.libraries.skill = previous;
     store.selectedId = "one";
@@ -91,7 +91,7 @@ describe("openLibrary", () => {
     expect(store.libraries.skill).toEqual(previous);
     expect(store.selectedId).toBe("one");
     expect(store.libraryGeneration).toBe(generation);
-    expect(store.error).toContain("racine");
+    expect(store.error).toBe("Choisissez la racine du dépôt Git.\n/repo");
     expect(store.libraryBusy).toBe(false);
   });
 

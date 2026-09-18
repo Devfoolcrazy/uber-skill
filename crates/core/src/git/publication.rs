@@ -6,7 +6,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use super::{config, git, interruption, optional, repository_root, run, Interruption};
+use super::{config, exclusive, git, interruption, optional, repository_root, run, Interruption};
+use crate::error::{BlockReason, ErrorPayload, GitAction, InputError, Stale};
 use crate::{Error, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,7 +28,7 @@ pub struct Preview {
     pub pending_commits: Vec<String>,
     pub files: Vec<ChangedFile>,
     pub snapshot: String,
-    pub blocked: Option<String>,
+    pub blocked: Option<BlockReason>,
 }
 
 #[derive(Debug, Serialize)]
@@ -35,7 +36,7 @@ pub struct PublicationResult {
     /// Present only if this attempt created a commit.
     pub commit: Option<String>,
     pub pushed: bool,
-    pub push_error: Option<String>,
+    pub push_error: Option<ErrorPayload>,
 }
 
 pub fn preview(path: &Path) -> Result<Preview> {
@@ -50,13 +51,10 @@ pub fn preview(path: &Path) -> Result<Preview> {
         None => (None, None),
     };
     // Later checks take precedence: the last reason found is the one reported.
-    let mut blocked: Option<String> = if branch.is_none() {
-        Some("HEAD est détachée. Ouvrez une branche dans votre outil Git avant de publier.".into())
+    let mut blocked = if branch.is_none() {
+        Some(BlockReason::DetachedHead)
     } else if remote.as_deref().is_none_or(|r| r.is_empty() || r == ".") || remote_branch.is_none() {
-        Some(
-            "Cette branche n’a pas de branche distante de suivi. Configurez-la dans votre outil Git avant de publier."
-                .into(),
-        )
+        Some(BlockReason::NoUpstream)
     } else {
         None
     };
@@ -64,19 +62,18 @@ pub fn preview(path: &Path) -> Result<Preview> {
     if let Some(r) = remote.as_deref().filter(|r| *r != ".") {
         match single_push_url(&root, r)? {
             Some(url) => push_url = url,
-            None => blocked = Some("Le dépôt distant est absent ou comporte plusieurs destinations de push. Configurez une destination unique dans votre outil Git.".into()),
+            None => blocked = Some(BlockReason::AmbiguousPushUrl),
         }
     }
     match interruption(&root)? {
-        Some(Interruption::Operation) => blocked = Some("Une fusion, un rebase ou une autre opération Git est en cours. Terminez-la dans votre outil Git avant de publier.".into()),
-        Some(Interruption::Conflicts) => blocked = Some("Des conflits Git restent à résoudre dans votre outil Git.".into()),
+        Some(Interruption::Operation) => blocked = Some(BlockReason::OperationInProgress),
+        Some(Interruption::Conflicts) => blocked = Some(BlockReason::Conflicts),
         None => {}
     }
     let (pending_count, pending_commits) = pending(&root, head.as_deref())?;
     let changes = working_tree_changes(&root, head.as_deref())?;
     if changes.touches_submodule {
-        blocked =
-            Some("La publication de changements de sous-modules doit être effectuée dans votre outil Git.".into());
+        blocked = Some(BlockReason::SubmoduleChange);
     }
     let mut preview = Preview {
         root: root.to_string_lossy().into_owned(),
@@ -113,7 +110,10 @@ fn pending(root: &Path, head: Option<&str>) -> Result<(usize, Vec<String>)> {
         .unwrap_or_else(|| head.to_owned());
     let count = run(git(root).args(["rev-list", "--count", &range]))?
         .parse()
-        .map_err(|_| Error::GitCommand("Nombre de commits Git invalide.".into()))?;
+        .map_err(|_| Error::GitCommand {
+            action: GitAction::Parse,
+            stderr: "rev-list --count".into(),
+        })?;
     let commits = run(git(root).args(["log", "--format=%h %s", "-20", &range, "--"]))?
         .lines()
         .map(str::to_owned)
@@ -132,7 +132,7 @@ struct WorkingTreeChanges {
 /// additions, deletions, binaries, modes and clean filters without disturbing
 /// any user staging in the real index.
 fn working_tree_changes(root: &Path, head: Option<&str>) -> Result<WorkingTreeChanges> {
-    let temp = tempfile::tempdir().map_err(|e| Error::io("index temporaire", e))?;
+    let temp = tempfile::tempdir().map_err(|e| Error::io("temporary index", e))?;
     let index = temp.path().join("index");
     let temp_git = || {
         let mut cmd = git(root);
@@ -145,7 +145,10 @@ fn working_tree_changes(root: &Path, head: Option<&str>) -> Result<WorkingTreeCh
     let names = run(temp_git().args(["diff", "--cached", "--name-status", "--no-renames", "-z"]))?;
     let parts: Vec<_> = names.split('\0').filter(|s| !s.is_empty()).collect();
     if parts.len() % 2 != 0 {
-        return Err(Error::GitCommand("Liste de fichiers Git invalide.".into()));
+        return Err(Error::GitCommand {
+            action: GitAction::Parse,
+            stderr: "diff --name-status".into(),
+        });
     }
     let mut files = Vec::new();
     let mut touches_submodule = false;
@@ -183,33 +186,23 @@ fn working_tree_changes(root: &Path, head: Option<&str>) -> Result<WorkingTreeCh
 /// Commit only selected files, preserving staging for all unselected paths.
 /// Existing local commits are included in the explicit, non-forced branch push.
 pub fn publish(path: &Path, snapshot: &str, paths: &[String], message: &str) -> Result<PublicationResult> {
-    let _guard = super::OPERATION_LOCK
-        .lock()
-        .map_err(|_| Error::GitUnavailable("Publication Git indisponible.".into()))?;
+    let _guard = exclusive();
     let current = preview(path)?;
     if current.snapshot != snapshot {
-        return Err(Error::GitStale(
-            "La bibliothèque a changé depuis l’aperçu. Actualisez les différences avant de publier.".into(),
-        ));
+        return Err(Error::GitStale(Stale::Preview));
     }
-    if let Some(reason) = &current.blocked {
-        return Err(Error::GitBlocked(reason.clone()));
+    if let Some(reason) = current.blocked {
+        return Err(Error::GitBlocked(reason));
     }
     let selected: BTreeSet<_> = paths.iter().collect();
     if selected.len() != paths.len() || selected.iter().any(|p| !current.files.iter().any(|f| &f.path == *p)) {
-        return Err(Error::InvalidInput(
-            "La sélection contient un fichier absent de l’aperçu.".into(),
-        ));
+        return Err(Error::InvalidInput(InputError::UnknownSelection));
     }
     if !paths.is_empty() && message.trim().is_empty() {
-        return Err(Error::InvalidInput(
-            "Le message de commit ne peut pas être vide.".into(),
-        ));
+        return Err(Error::InvalidInput(InputError::EmptyCommitMessage));
     }
     if paths.is_empty() && current.pending_count == 0 {
-        return Err(Error::InvalidInput(
-            "Sélectionnez des fichiers à publier. Aucun commit local n’est en attente.".into(),
-        ));
+        return Err(Error::InvalidInput(InputError::NothingToPublish));
     }
     let root = Path::new(&current.root);
     let mut commit = None;
@@ -217,14 +210,16 @@ pub fn publish(path: &Path, snapshot: &str, paths: &[String], message: &str) -> 
         run(git(root).args(["add", "--all", "--"]).args(paths))?;
         // --only explicitly excludes other staged files. Hooks and signing stay
         // enabled according to the user's Git configuration.
-        run(git(root).args(["commit", "--only", "--cleanup=verbatim", "-m", message, "--"]).args(paths))
-            .map_err(|e| Error::GitCommand(format!("{e}\nLe commit a échoué ; les fichiers sélectionnés restent préparés dans Git. Aucun push n’a été effectué.")))?;
+        run(git(root)
+            .args(["commit", "--only", "--cleanup=verbatim", "-m", message, "--"])
+            .args(paths))
+        .map_err(|e| e.during(GitAction::Commit))?;
         commit = Some(run(git(root).args(["rev-parse", "HEAD"]))?);
     }
     let head = commit
         .as_ref()
         .or(current.head.as_ref())
-        .ok_or_else(|| Error::InvalidInput("Aucun commit à envoyer.".into()))?;
+        .ok_or(Error::InvalidInput(InputError::NothingToPublish))?;
     let remote = current.remote.as_deref().unwrap();
     let remote_branch = current.remote_branch.as_deref().unwrap();
     // Pin the source OID: an external commit made while pushing is not included.
@@ -242,7 +237,7 @@ pub fn publish(path: &Path, snapshot: &str, paths: &[String], message: &str) -> 
     Ok(PublicationResult {
         commit,
         pushed: push.is_ok(),
-        push_error: push.err().map(|e| e.to_string()),
+        push_error: push.err().map(ErrorPayload::from),
     })
 }
 
@@ -430,7 +425,7 @@ pub(super) mod tests {
     fn blocks_detached_missing_tracking_and_git_operations() {
         let (_temp, local, _) = fixture();
         run_git(&local, &["checkout", "--detach"]);
-        assert!(preview(&local).unwrap().blocked.unwrap().contains("détachée"));
+        assert_eq!(preview(&local).unwrap().blocked, Some(BlockReason::DetachedHead));
         run_git(&local, &["checkout", "main"]);
         fs::write(local.join(".git/MERGE_HEAD"), run_git(&local, &["rev-parse", "HEAD"])).unwrap();
         let p = preview(&local).unwrap();
@@ -438,7 +433,7 @@ pub(super) mod tests {
         assert!(publish(&local, &p.snapshot, &[], "").is_err());
         fs::remove_file(local.join(".git/MERGE_HEAD")).unwrap();
         run_git(&local, &["branch", "--unset-upstream"]);
-        assert!(preview(&local).unwrap().blocked.unwrap().contains("suivi"));
+        assert_eq!(preview(&local).unwrap().blocked, Some(BlockReason::NoUpstream));
     }
 
     #[test]

@@ -37,7 +37,7 @@ describe("publication", () => {
       publicationPreview({ files: [], snapshot: "preview-3" }),
     ];
     const results = [
-      { commit: "0123456789abcdef", pushed: false, push_error: "Could not resolve host" },
+      { commit: "0123456789abcdef", pushed: false, push_error: { code: "git-failed", message: "git failed", details: "Could not resolve host" } },
       { commit: null, pushed: true, push_error: null },
     ];
     const { calls } = bridge({
@@ -59,7 +59,7 @@ describe("publication", () => {
   });
 
   it("refuses to publish a blocked repository and an empty commit message", async () => {
-    bridge({ git_publication_preview: () => publicationPreview({ blocked: "HEAD est détachée." }) });
+    bridge({ git_publication_preview: () => publicationPreview({ blocked: "detached-head" }) });
     const { unmount } = render(PublishLibrary, { onclose: vi.fn() });
     await fireEvent.click(await screen.findByLabelText("Inclure skills/one/SKILL.md"));
     expect(button("Commit et push").disabled).toBe(true);

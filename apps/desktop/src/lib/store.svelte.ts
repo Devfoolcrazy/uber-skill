@@ -10,6 +10,7 @@ import {
   type Skill,
   type Target,
 } from "./api";
+import { errorText } from "./errors";
 
 export const DRIFT_LABEL: Record<string, string> = {
   "up-to-date": "À jour",
@@ -140,7 +141,7 @@ class AppStore {
   }
 
   fail(e: unknown) {
-    this.error = typeof e === "string" ? e : e instanceof Error ? e.message : JSON.stringify(e);
+    this.error = errorText(e);
     console.error(e);
   }
 

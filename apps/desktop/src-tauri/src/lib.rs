@@ -6,18 +6,52 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use uber_skill_core::{
-    git, install, lint, search, Config, FileDiff, InstalledSkill, Issue, ItemKind, Library, LockEntry, Query, Skill,
-    Target,
+    git, install, lint, search, Config, Error, ErrorPayload, FileDiff, InstalledSkill, Issue, ItemKind, Library,
+    LockEntry, Query, Skill, Target,
 };
 
 struct AppState {
     config: Mutex<Config>,
 }
 
-type CmdResult<T> = Result<T, String>;
+/// Commands fail with a code the front end translates, never with prose.
+type CmdResult<T> = Result<T, ErrorPayload>;
 
-fn err<E: std::fmt::Display>(e: E) -> String {
-    e.to_string()
+trait IntoPayload {
+    fn into_payload(self) -> ErrorPayload;
+}
+
+impl IntoPayload for Error {
+    fn into_payload(self) -> ErrorPayload {
+        self.into()
+    }
+}
+
+/// A poisoned state lock or a crashed worker: nothing the user can act on.
+fn internal(e: impl std::fmt::Display) -> ErrorPayload {
+    ErrorPayload::new("internal", "internal error", Some(e.to_string()))
+}
+
+impl<T> IntoPayload for std::sync::PoisonError<T> {
+    fn into_payload(self) -> ErrorPayload {
+        internal(self)
+    }
+}
+
+impl IntoPayload for tauri::Error {
+    fn into_payload(self) -> ErrorPayload {
+        internal(self)
+    }
+}
+
+impl IntoPayload for std::io::Error {
+    fn into_payload(self) -> ErrorPayload {
+        ErrorPayload::new("io", "io error", Some(self.to_string()))
+    }
+}
+
+fn err<E: IntoPayload>(e: E) -> ErrorPayload {
+    e.into_payload()
 }
 
 fn open_library(state: &AppState, kind: ItemKind) -> CmdResult<Library> {
@@ -63,9 +97,10 @@ async fn clone_library(state: State<'_, AppState>, url: String, parent: PathBuf,
     let mut cfg = state.config.lock().map_err(err)?;
     let next = git::library_config(&cfg, &path).map_err(err)?;
     next.save().map_err(|e| {
-        format!(
-            "Dépôt cloné dans {}, mais configuration non enregistrée : {e}. Vous pouvez ouvrir ce dépôt localement.",
-            path.display()
+        ErrorPayload::new(
+            "clone-not-saved",
+            "repository cloned but the configuration could not be saved",
+            Some(format!("{} : {e}", path.display())),
         )
     })?;
     *cfg = next;
@@ -236,23 +271,6 @@ fn create_skill(
         .map_err(err)
 }
 
-/// Warnings for items whose declared hosts exclude `target` (empty = all fine).
-#[tauri::command]
-fn check_hosts(state: State<AppState>, kind: ItemKind, ids: Vec<String>, target: Target) -> CmdResult<Vec<String>> {
-    let lib = open_library(&state, kind)?;
-    let mut out = Vec::new();
-    if !target.supports(kind) {
-        return Err(format!("{} ne gère pas les {}s", target.label(), kind.label()));
-    }
-    for id in ids {
-        let skill = lib.get(&id).map_err(err)?;
-        if let Some(w) = install::host_mismatch(&skill, &target) {
-            out.push(w);
-        }
-    }
-    Ok(out)
-}
-
 #[tauri::command]
 fn delete_skill(state: State<AppState>, kind: ItemKind, id: String) -> CmdResult<()> {
     open_library(&state, kind)?.delete(&id).map_err(err)
@@ -330,7 +348,7 @@ fn sync_skill(
         "push" => install::sync_to_library(&lib, &id, &project, &target)
             .map(|_| ())
             .map_err(err),
-        other => Err(format!("unknown direction {other}")),
+        other => Err(internal(format!("unknown direction {other}"))),
     }
 }
 
@@ -371,7 +389,7 @@ fn open_in_editor(state: State<AppState>, path: PathBuf) -> CmdResult<()> {
             Err(e) => last = format!("{}: {e}", c[0]),
         }
     }
-    Err(format!("could not open editor ({last})"))
+    Err(ErrorPayload::new("editor", "could not open the editor", Some(last)))
 }
 
 #[tauri::command]
@@ -407,7 +425,6 @@ pub fn run() {
             write_skill_file,
             update_meta,
             create_skill,
-            check_hosts,
             delete_skill,
             import_skill,
             lint_skill,

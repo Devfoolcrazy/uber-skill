@@ -143,6 +143,13 @@ l’application (suivi distant configuré, avance rapide uniquement, aucun push 
 une copie locale sans vérification de fraîcheur : lancer `remote status` avant si nécessaire. Remonter une copie projet vers la bibliothèque reste un enregistrement
 local ; sa publication Git est une action séparée.
 
+## Erreurs et libellés
+
+Le `core` ne produit aucun texte destiné à l’utilisateur : une erreur porte un code stable
+(`git-stale`, `blocked.diverged`, `input.clone-url`…), un message anglais pour les logs et le CLI, et des
+détails jamais traduits (chemin, identifiant, sortie de Git). L’application traduit les codes dans
+`apps/desktop/src/lib/errors.ts` ; un test du `core` échoue si un code n’y a pas de libellé.
+
 ## Tests
 
 ```sh

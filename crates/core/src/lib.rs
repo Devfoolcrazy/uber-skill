@@ -14,7 +14,7 @@ pub mod search;
 pub mod targets;
 
 pub use config::Config;
-pub use error::{Error, Result};
+pub use error::{BlockReason, Error, ErrorPayload, Result};
 pub use install::{DriftState, FileDiff, InstalledSkill, LockEntry, LockFile};
 pub use library::Library;
 pub use lint::{Issue, Severity};

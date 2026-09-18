@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api, type PublicationPreview, type PublicationResult } from "$lib/api";
+  import { BLOCK_LABEL, errorText } from "$lib/errors";
   import { store } from "$lib/store.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
@@ -31,7 +32,7 @@
       if (!next.files.some((f) => f.path === active)) active = next.files[0]?.path ?? null;
     } catch (e) {
       preview = null;
-      error = String(e);
+      error = errorText(e);
     } finally {
       busy = false;
     }
@@ -51,7 +52,7 @@
       selected = [];
       if (result.pushed) store.notify("Bibliothèque publiée");
     } catch (e) {
-      error = String(e);
+      error = errorText(e);
     } finally {
       busy = false;
     }
@@ -68,7 +69,7 @@
   {/if}
   {#if preview}
     <p class="muted selectable">{preview.branch ?? "HEAD détachée"} → {preview.remote ?? "aucun dépôt distant"}/{preview.remote_branch ?? "aucune branche de suivi"}</p>
-    {#if preview.blocked}<p class="warning" role="alert">{preview.blocked}</p>{/if}
+    {#if preview.blocked}<p class="warning" role="alert">{BLOCK_LABEL[preview.blocked]}</p>{/if}
     {#if preview.pending_count > 0}
       <details class="pending">
         <summary>{preview.pending_count} commit(s) local(aux) seront également envoyés</summary>
@@ -113,7 +114,7 @@
   {#if result?.pushed}<p class="success" role="status">Publication réussie{result.commit ? ` — commit ${result.commit.slice(0, 8)}` : ""}.</p>{/if}
   {#if result && !result.pushed}
     <p class="warning" role="alert">{result.commit ? `Le commit ${result.commit.slice(0, 8)} a été créé localement, mais son envoi a échoué.` : "L’envoi des commits a échoué."} Vous pouvez réessayer avec « Envoyer les commits » sans créer un nouveau commit.</p>
-    <pre class="error selectable">{result.push_error}</pre>
+    <pre class="error selectable">{errorText(result.push_error)}</pre>
   {/if}
   <div class="footer">
     <button disabled={busy} onclick={() => refresh()}>Actualiser</button>

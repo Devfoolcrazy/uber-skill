@@ -1,6 +1,7 @@
 //! Fetch the configured upstream and apply reviewed fast-forward updates only.
 
-use super::{config, git, interruption, optional, repository_root, run, Interruption, OPERATION_LOCK};
+use super::{config, exclusive, git, interruption, optional, repository_root, run, Interruption};
+use crate::error::{BlockReason, ErrorPayload, GitAction, Stale};
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -19,8 +20,8 @@ pub struct SyncStatus {
     pub behind: usize,
     pub changed_files: Vec<String>,
     pub verified: bool,
-    pub fetch_error: Option<String>,
-    pub blocked: Option<String>,
+    pub fetch_error: Option<ErrorPayload>,
+    pub blocked: Option<BlockReason>,
     pub snapshot: String,
 }
 
@@ -53,10 +54,10 @@ pub fn inspect(path: &Path) -> Result<SyncStatus> {
             status.upstream_ref = Some(tracking);
         }
     } else {
-        status.blocked = Some("HEAD est détachée. Choisissez une branche dans votre outil Git.".into());
+        status.blocked = Some(BlockReason::DetachedHead);
     }
     if status.head.is_none() {
-        status.blocked = Some("La branche locale ne contient aucun commit. Initialisez-la dans votre outil Git ou publiez un premier commit.".into());
+        status.blocked = Some(BlockReason::NoCommits);
     }
     if status.remote.as_deref().is_none_or(|r| r.is_empty() || r == ".")
         || status
@@ -68,17 +69,11 @@ pub fn inspect(path: &Path) -> Result<SyncStatus> {
             .as_deref()
             .is_none_or(|r| !r.starts_with("refs/remotes/"))
     {
-        status
-            .blocked
-            .get_or_insert("Aucune branche distante de suivi utilisable. Configurez-la dans votre outil Git.".into());
+        status.blocked.get_or_insert(BlockReason::NoUpstream);
     }
     match interruption(&root)? {
-        Some(Interruption::Operation) => {
-            status.blocked = Some("Une opération Git est en cours. Terminez-la dans votre outil Git.".into())
-        }
-        Some(Interruption::Conflicts) => {
-            status.blocked = Some("Des conflits restent à résoudre dans votre outil Git.".into())
-        }
+        Some(Interruption::Operation) => status.blocked = Some(BlockReason::OperationInProgress),
+        Some(Interruption::Conflicts) => status.blocked = Some(BlockReason::Conflicts),
         None => {}
     }
     let changed = run(git(&root).args([
@@ -102,16 +97,20 @@ pub fn inspect(path: &Path) -> Result<SyncStatus> {
             .split_whitespace()
             .map(str::parse)
             .collect::<std::result::Result<_, _>>()
-            .map_err(|_| Error::GitCommand("État de synchronisation Git invalide.".into()))?;
+            .map_err(|_| Error::GitCommand {
+                action: GitAction::Parse,
+                stderr: "rev-list --left-right --count".into(),
+            })?;
         if counts.len() != 2 {
-            return Err(Error::GitCommand("État de synchronisation Git incomplet.".into()));
+            return Err(Error::GitCommand {
+                action: GitAction::Parse,
+                stderr: "rev-list --left-right --count".into(),
+            });
         }
         status.ahead = counts[0];
         status.behind = counts[1];
         if status.ahead > 0 && status.behind > 0 {
-            status.blocked = Some(
-                "Les historiques local et distant divergent. Résolvez cette divergence dans votre outil Git.".into(),
-            );
+            status.blocked = Some(BlockReason::Diverged);
         }
     }
     let mut hash = Sha256::new();
@@ -145,7 +144,7 @@ fn check_unlocked(path: &Path) -> Result<SyncStatus> {
                     state.verified = state.remote_head.is_some();
                 }
                 Err(e) => {
-                    state.fetch_error = Some(e.to_string());
+                    state.fetch_error = Some(e.into());
                 }
             }
         }
@@ -154,33 +153,32 @@ fn check_unlocked(path: &Path) -> Result<SyncStatus> {
 }
 
 pub fn check(path: &Path) -> Result<SyncStatus> {
-    let _guard = OPERATION_LOCK
-        .lock()
-        .map_err(|_| Error::GitUnavailable("Git indisponible.".into()))?;
+    let _guard = exclusive();
     check_unlocked(path)
 }
 
 pub fn update(path: &Path, expected_snapshot: &str) -> Result<SyncStatus> {
-    let _guard = OPERATION_LOCK
-        .lock()
-        .map_err(|_| Error::GitUnavailable("Git indisponible.".into()))?;
+    let _guard = exclusive();
     let state = check_unlocked(path)?;
     if state.snapshot != expected_snapshot {
-        return Err(Error::GitStale(
-            "L’état Git a changé. Vérifiez à nouveau avant de mettre à jour.".into(),
-        ));
+        return Err(Error::GitStale(Stale::Repository));
     }
     if !state.verified {
-        return Err(Error::GitBlocked(
-            "La fraîcheur distante n’a pas pu être vérifiée. Aucune mise à jour appliquée.".into(),
-        ));
+        return Err(Error::GitBlocked(BlockReason::Unverified));
     }
-    if let Some(reason) = &state.blocked {
-        return Err(Error::GitBlocked(reason.clone()));
+    if let Some(reason) = state.blocked {
+        return Err(Error::GitBlocked(reason));
     }
     if state.behind > 0 {
-        run(git(path).args(["merge", "--ff-only", "--no-autostash", "--no-overwrite-ignore", "--no-edit", state.remote_head.as_deref().unwrap()]))
-            .map_err(|e| Error::GitCommand(format!("{e}\nMise à jour interrompue. Préservez vos modifications et résolvez la situation dans votre outil Git avant de réessayer.")))?;
+        run(git(path).args([
+            "merge",
+            "--ff-only",
+            "--no-autostash",
+            "--no-overwrite-ignore",
+            "--no-edit",
+            state.remote_head.as_deref().unwrap(),
+        ]))
+        .map_err(|e| e.during(GitAction::FastForward))?;
     }
     let mut updated = inspect(path)?;
     updated.verified = true;
@@ -273,7 +271,7 @@ pub(super) mod tests {
         run_git(&local, &["commit", "--allow-empty", "-m", "local commit"]);
         let state = check(&local).unwrap();
         assert_eq!((state.ahead, state.behind), (1, 1));
-        assert!(state.blocked.as_ref().unwrap().contains("divergent"));
+        assert_eq!(state.blocked, Some(BlockReason::Diverged));
         assert!(update(&local, &state.snapshot).is_err());
         assert_eq!(inspect(&local).unwrap().head, state.head);
         assert!(!local.join(".git/MERGE_HEAD").exists());

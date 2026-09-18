@@ -125,16 +125,36 @@ pub fn installed_path(target_dir: &Path, id: &str, kind: ItemKind) -> PathBuf {
 }
 
 /// A human-readable warning when an item declares hosts that exclude `target`.
-pub fn host_mismatch(skill: &Skill, target: &Target) -> Option<String> {
+/// An item whose declared hosts exclude the install target. Installing stays
+/// possible; front ends word the warning themselves.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HostMismatch {
+    pub id: String,
+    pub hosts: Vec<String>,
+    pub target: String,
+}
+
+impl std::fmt::Display for HostMismatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} is declared for {} but the target is {}",
+            self.id,
+            self.hosts.join(", "),
+            self.target
+        )
+    }
+}
+
+pub fn host_mismatch(skill: &Skill, target: &Target) -> Option<HostMismatch> {
     if target.accepts_hosts(&skill.hosts) {
         None
     } else {
-        Some(format!(
-            "{} is declared for {} but the target is {}",
-            skill.id,
-            skill.hosts.join(", "),
-            target.label()
-        ))
+        Some(HostMismatch {
+            id: skill.id.clone(),
+            hosts: skill.hosts.clone(),
+            target: target.label().to_string(),
+        })
     }
 }
 

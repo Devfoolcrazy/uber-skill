@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, SOURCE_LABEL, type GitSyncStatus, type InstallationPlan, type InstallRequest } from "$lib/api";
+  import { api, hostMismatchText, SOURCE_LABEL, type GitSyncStatus, type InstallationPlan, type InstallRequest } from "$lib/api";
+  import { BLOCK_LABEL, errorText } from "$lib/errors";
   import { store } from "$lib/store.svelte";
 
   let { request, onclose }: { request?: InstallRequest; onclose: () => void } = $props();
@@ -28,7 +29,7 @@
 
   async function refresh() {
     busy = true; error = null; success = null; plan = null; status = null;
-    try { await load(); } catch (e) { error = String(e); }
+    try { await load(); } catch (e) { error = errorText(e); }
     finally { busy = false; }
   }
 
@@ -44,14 +45,14 @@
   async function installLocal() {
     if (busy || !plan || !canInstall) return;
     busy = true; error = null;
-    try { await performInstall(plan); } catch (e) { error = String(e); }
+    try { await performInstall(plan); } catch (e) { error = errorText(e); }
     finally { busy = false; }
   }
 
   async function update() {
     if (busy || !status || !canUpdate || (request && !canInstall)) return;
     busy = true; error = null; success = null;
-    const acceptedWarnings = plan?.warnings.join("\n") ?? "";
+    const acceptedWarnings = JSON.stringify(plan?.warnings ?? []);
     const accepted = acceptHosts;
     try {
       status = await api.updateLibraryGit(status.snapshot);
@@ -63,7 +64,7 @@
         await load();
         if (plan && status?.verified && !status.blocked && status.behind === 0) {
           const next = plan as InstallationPlan;
-          if (next.warnings.length === 0 || (accepted && next.warnings.join("\n") === acceptedWarnings)) {
+          if (next.warnings.length === 0 || (accepted && JSON.stringify(next.warnings) === acceptedWarnings)) {
             await performInstall(next);
           } else {
             success = "Bibliothèque mise à jour. Vérifiez les nouveaux avertissements avant d’installer.";
@@ -71,7 +72,7 @@
         }
       }
     } catch (e) {
-      error = String(e);
+      error = errorText(e);
       // Never fall back to a local installation after a failed update.
     } finally { busy = false; }
   }
@@ -88,8 +89,8 @@
     {:else}
       <p class="warning">La fraîcheur distante n’a pas pu être vérifiée. {request ? "Vous pouvez choisir explicitement d’installer la version locale." : "Vérifiez le réseau et la configuration Git, puis réessayez."}</p>
     {/if}
-    {#if status.fetch_error}<p class="error selectable">{status.fetch_error}</p>{/if}
-    {#if status.blocked}<p class="warning" role="alert">{status.blocked}</p>{/if}
+    {#if status.fetch_error}<p class="error selectable">{errorText(status.fetch_error)}</p>{/if}
+    {#if status.blocked}<p class="warning" role="alert">{BLOCK_LABEL[status.blocked]}</p>{/if}
     <details>
       <summary>{status.changed_files.length} fichier(s) avec des changements locaux</summary>
       <ul>{#each status.changed_files as path}<li class="selectable">{path}</li>{/each}</ul>
@@ -97,7 +98,7 @@
   {/if}
   {#if plan?.git_error}
     <p class="warning">La fraîcheur distante n’a pas pu être vérifiée. Une installation locale reste possible.</p>
-    <p class="error selectable">{plan.git_error}</p>
+    <p class="error selectable">{errorText(plan.git_error)}</p>
   {/if}
   {#if store.editorDirty}
     <p class="warning">Des modifications ne sont pas enregistrées dans l’éditeur. L’installation utilise les fichiers sur disque. Enregistrez vos modifications avant de mettre à jour la bibliothèque.</p>
@@ -105,7 +106,7 @@
   {#if plan}
     <ul>{#each plan.items as item}<li><strong>{item.id}</strong> — {SOURCE_LABEL[item.source_state]}</li>{/each}</ul>
     {#if plan.warnings.length}
-      <div class="warning">{#each plan.warnings as warning}<p>{warning}</p>{/each}</div>
+      <div class="warning">{#each plan.warnings as warning}<p>{hostMismatchText(warning)}</p>{/each}</div>
       <label><input type="checkbox" bind:checked={acceptHosts} disabled={busy} /> Installer malgré ces incompatibilités de harnais</label>
     {/if}
   {/if}

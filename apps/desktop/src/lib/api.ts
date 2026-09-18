@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { BlockReason, ErrorPayload } from "./errors";
 
 export type ItemKind = "skill" | "agent";
 export const KIND_LABEL: Record<ItemKind, { one: string; many: string }> = {
@@ -131,13 +132,13 @@ export interface PublicationPreview {
   pending_commits: string[];
   files: { path: string; status: string; diff: string }[];
   snapshot: string;
-  blocked: string | null;
+  blocked: BlockReason | null;
 }
 
 export interface PublicationResult {
   commit: string | null;
   pushed: boolean;
-  push_error: string | null;
+  push_error: ErrorPayload | null;
 }
 
 export type SourceState = "published" | "local-draft" | "unpublished-commit" | "unverified";
@@ -151,12 +152,14 @@ export interface GitSyncStatus {
   root: string; branch: string | null; head: string | null;
   remote: string | null; remote_ref: string | null; upstream_ref: string | null; remote_head: string | null;
   ahead: number; behind: number; changed_files: string[];
-  verified: boolean; fetch_error: string | null; blocked: string | null; snapshot: string;
+  verified: boolean; fetch_error: ErrorPayload | null; blocked: BlockReason | null; snapshot: string;
 }
+export interface HostMismatch { id: string; hosts: string[]; target: string }
+export const hostMismatchText = (w: HostMismatch) => `${w.id} est déclaré pour ${w.hosts.join(", ")}, mais la cible est ${w.target}.`;
 export interface InstallationPlan {
   root: string; kind: ItemKind; target: Target;
   items: { id: string; source: string; hash: string; source_state: SourceState }[];
-  git: GitSyncStatus | null; git_error: string | null; warnings: string[];
+  git: GitSyncStatus | null; git_error: ErrorPayload | null; warnings: HostMismatch[];
 }
 export interface InstallRequest { kind: ItemKind; ids: string[]; project: string; target: Target }
 
@@ -185,7 +188,6 @@ export const api = {
   ) => invoke<Skill>("update_meta", { kind, id, patch }),
   createSkill: (kind: ItemKind, id: string, description: string, category: string | null, tags: string[], hosts: string[]) =>
     invoke<Skill>("create_skill", { kind, id, description, category, tags, hosts }),
-  checkHosts: (kind: ItemKind, ids: string[], target: Target) => invoke<string[]>("check_hosts", { kind, ids, target }),
   deleteSkill: (kind: ItemKind, id: string) => invoke<void>("delete_skill", { kind, id }),
   importSkill: (kind: ItemKind, path: string, newId: string | null) => invoke<Skill>("import_skill", { kind, path, newId }),
   lintSkill: (kind: ItemKind, id: string) => invoke<Issue[]>("lint_skill", { kind, id }),

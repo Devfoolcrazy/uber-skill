@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use crate::error::{GitAction, InputError};
 use crate::{Config, Error, Result};
 
 pub mod installation;
@@ -10,6 +11,12 @@ pub mod publication;
 pub mod sync;
 
 static OPERATION_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Serialize operations that read a reviewed state and then act on it. The lock
+/// guards no data, so a panic in a previous holder leaves nothing to repair.
+fn exclusive() -> std::sync::MutexGuard<'static, ()> {
+    OPERATION_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 fn command() -> Command {
     let mut cmd = Command::new("git");
@@ -25,14 +32,12 @@ fn command() -> Command {
 }
 
 fn run(cmd: &mut Command) -> Result<String> {
-    let output = cmd
-        .output()
-        .map_err(|e| Error::GitUnavailable(format!("Impossible de lancer Git. Vérifiez son installation : {e}")))?;
+    let output = cmd.output().map_err(|e| Error::GitUnavailable(e.to_string()))?;
     if !output.status.success() {
-        return Err(Error::GitCommand(format!(
-            "Échec de Git : {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        )));
+        return Err(Error::GitCommand {
+            action: GitAction::Run,
+            stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        });
     }
     Ok(String::from_utf8_lossy(&output.stdout)
         .trim_end_matches(['\r', '\n'])
@@ -102,10 +107,7 @@ pub fn repository_root(path: &Path) -> Result<PathBuf> {
     let root = PathBuf::from(root);
     let root = root.canonicalize().map_err(|e| Error::io(&root, e))?;
     if root != path {
-        return Err(Error::InvalidInput(format!(
-            "Choisissez la racine du dépôt Git : {}",
-            root.display()
-        )));
+        return Err(Error::InvalidInput(InputError::NotRepositoryRoot(root)));
     }
     Ok(root)
 }
@@ -123,7 +125,7 @@ pub fn library_config(current: &Config, path: &Path) -> Result<Config> {
 pub fn clone_repository(url: &str, parent: &Path, name: &str) -> Result<PathBuf> {
     let url = url.trim();
     if url.is_empty() || url.starts_with('-') || url.chars().any(char::is_control) {
-        return Err(Error::InvalidInput("Indiquez une URL de dépôt Git valide.".into()));
+        return Err(Error::InvalidInput(InputError::CloneUrl));
     }
     if name.is_empty()
         || name == "."
@@ -133,9 +135,7 @@ pub fn clone_repository(url: &str, parent: &Path, name: &str) -> Result<PathBuf>
         || name.contains(['/', '\\', ':'])
         || name.chars().any(char::is_control)
     {
-        return Err(Error::InvalidInput(
-            "Indiquez un nom de dossier simple, sans séparateur de chemin.".into(),
-        ));
+        return Err(Error::InvalidInput(InputError::CloneName));
     }
     let parent = parent.canonicalize().map_err(|e| Error::io(parent, e))?;
     if !parent.is_dir() {
@@ -145,10 +145,10 @@ pub fn clone_repository(url: &str, parent: &Path, name: &str) -> Result<PathBuf>
     // Reserve the destination atomically, rejecting even existing empty folders
     // and dangling symlinks. On failure, never recursively delete user files.
     std::fs::create_dir(&destination).map_err(|e| {
-        Error::InvalidInput(format!(
-            "Impossible de créer {} : {e}. Choisissez un nouveau dossier.",
-            destination.display()
-        ))
+        Error::InvalidInput(InputError::CloneDestination {
+            path: destination.clone(),
+            reason: e.to_string(),
+        })
     })?;
     let result = run(command()
         .args([
@@ -171,14 +171,13 @@ pub fn clone_repository(url: &str, parent: &Path, name: &str) -> Result<PathBuf>
         .arg(&destination));
     if let Err(e) = result {
         let retained = std::fs::remove_dir(&destination).is_err();
-        return Err(Error::GitCommand(format!(
-            "{e}\nLe clonage n’a pas abouti. Vérifiez l’URL, le réseau et vos accès Git.{}",
-            if retained {
-                format!(" Le dossier partiel a été conservé : {}", destination.display())
-            } else {
-                String::new()
-            }
-        )));
+        return Err(match e.during(GitAction::Clone) {
+            Error::GitCommand { action, stderr } if retained => Error::GitCommand {
+                action,
+                stderr: format!("{stderr}\npartial directory kept: {}", destination.display()),
+            },
+            other => other,
+        });
     }
     repository_root(&destination)
 }
