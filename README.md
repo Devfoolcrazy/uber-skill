@@ -54,6 +54,13 @@ cargo build -p uber-skill-cli
 ./target/debug/uber-skill -k agent list
 ./target/debug/uber-skill -k agent install coder reviewer -p ~/mon/projet
 ./target/debug/uber-skill -k agent status -p ~/mon/projet
+
+# Dépôt Git de la bibliothèque
+./target/debug/uber-skill remote status                      # fetch + commits et fichiers en attente
+./target/debug/uber-skill remote update                      # avance rapide uniquement
+./target/debug/uber-skill remote publish skills/review-pr/SKILL.md -m "Clarifie review-pr"
+./target/debug/uber-skill remote publish --all -m "…"        # tous les fichiers modifiés
+./target/debug/uber-skill remote publish                     # renvoie les commits locaux en attente
 ```
 
 `--json` sur toutes les commandes de lecture. `--library <dir>` ou `UBER_SKILL_LIBRARY` remplace la config.
@@ -131,8 +138,9 @@ Le verrou conserve l’état de la source à l’installation (version publiée,
 non publié ou fraîcheur non vérifiée), affiché dans le tiroir « Installés ». Les anciens verrous
 restent lisibles. Le hash de contenu continue de servir à détecter les écarts projet/bibliothèque.
 
-Les commandes CLI conservent leur fonctionnement local existant ; le parcours décrit ici est celui
-de l’application de bureau. Remonter une copie projet vers la bibliothèque reste un enregistrement
+Côté CLI, `remote status`, `remote update` et `remote publish` appliquent les mêmes règles que
+l’application (suivi distant configuré, avance rapide uniquement, aucun push forcé). `install` reste
+une copie locale sans vérification de fraîcheur : lancer `remote status` avant si nécessaire. Remonter une copie projet vers la bibliothèque reste un enregistrement
 local ; sa publication Git est une action séparée.
 
 ## Tests

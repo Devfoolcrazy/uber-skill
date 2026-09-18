@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand};
-use uber_skill_core::{install, lint, search, Config, DriftState, ItemKind, Library, Query, Target};
+use uber_skill_core::{git, install, lint, search, Config, DriftState, ItemKind, Library, Query, Target};
 
 #[derive(Parser)]
 #[command(name = "uber-skill", version, about = "Manage a library of agent skills")]
@@ -141,6 +141,29 @@ enum Cmd {
         #[command(flatten)]
         project: ProjectArgs,
     },
+    /// Git repository of the library: fetch, fast-forward, commit and push
+    Remote {
+        #[command(subcommand)]
+        cmd: RemoteCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum RemoteCmd {
+    /// Fetch the tracked branch and show commits and files pending on each side
+    Status,
+    /// Fetch, then fast-forward the library (never merges, never stashes)
+    Update,
+    /// Commit the given files and push; without files, push pending commits
+    Publish {
+        /// Changed files to commit, relative to the repository root
+        files: Vec<String>,
+        /// Commit every changed file
+        #[arg(long, conflicts_with = "files")]
+        all: bool,
+        #[arg(short, long, default_value = "")]
+        message: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -173,6 +196,39 @@ fn open_library(cli: &Cli) -> Result<Library> {
             .context("no library configured: run `uber-skill config set-library <path>` or pass --library")?,
     };
     Library::open_kind(&path, kind).with_context(|| format!("opening {} library {}", kind.label(), path.display()))
+}
+
+/// Root of the library's Git repository.
+fn repository(cli: &Cli) -> Result<PathBuf> {
+    match &cli.library {
+        Some(p) => Ok(p.clone()),
+        None => Config::load()?
+            .library_path()
+            .context("no library configured: run `uber-skill config set-library <path>` or pass --library"),
+    }
+}
+
+fn print_sync_status(s: &git::sync::SyncStatus) {
+    println!(
+        "{} -> {} {}",
+        s.branch.as_deref().unwrap_or("(detached HEAD)"),
+        s.remote.as_deref().unwrap_or("(no remote)"),
+        s.remote_ref.as_deref().unwrap_or("(no tracked branch)")
+    );
+    if s.verified {
+        println!("behind: {}  ahead: {}", s.behind, s.ahead);
+    } else {
+        println!("remote freshness could not be verified");
+    }
+    if let Some(e) = &s.fetch_error {
+        eprintln!("{e}");
+    }
+    if let Some(b) = &s.blocked {
+        eprintln!("{b}");
+    }
+    for f in &s.changed_files {
+        println!("  changed  {f}");
+    }
 }
 
 fn print_json<T: serde::Serialize>(v: &T) -> Result<()> {
@@ -513,6 +569,48 @@ fn main() -> Result<()> {
             let (root, target) = project_root(project)?;
             install::adopt(&lib, id, &root, &target)?;
             println!("adopted {id}");
+        }
+        Cmd::Remote { cmd } => {
+            let root = repository(&cli)?;
+            match cmd {
+                RemoteCmd::Status => {
+                    let status = git::sync::check(&root)?;
+                    if cli.json {
+                        return print_json(&status);
+                    }
+                    print_sync_status(&status);
+                }
+                RemoteCmd::Update => {
+                    let checked = git::sync::check(&root)?;
+                    let status = git::sync::update(&root, &checked.snapshot)?;
+                    if cli.json {
+                        return print_json(&status);
+                    }
+                    println!("updated: {} commit(s) applied", checked.behind);
+                    print_sync_status(&status);
+                }
+                RemoteCmd::Publish { files, all, message } => {
+                    let preview = git::publication::preview(&root)?;
+                    let paths: Vec<String> = if *all {
+                        preview.files.iter().map(|f| f.path.clone()).collect()
+                    } else {
+                        files.clone()
+                    };
+                    let result = git::publication::publish(&root, &preview.snapshot, &paths, message)?;
+                    if cli.json {
+                        return print_json(&result);
+                    }
+                    if let Some(commit) = &result.commit {
+                        println!("committed {}", &commit[..12.min(commit.len())]);
+                    }
+                    match &result.push_error {
+                        None => println!("pushed"),
+                        Some(e) => {
+                            bail!("push failed, the commit stays local; run `remote publish` again to retry\n{e}")
+                        }
+                    }
+                }
+            }
         }
     }
     Ok(())
