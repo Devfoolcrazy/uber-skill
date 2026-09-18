@@ -60,6 +60,9 @@
     </div>
     <button class="small" style="margin-top:6px" disabled={!store.config?.library_path || store.loading} onclick={() => (publishOpen = true)}>Publier…</button>
     <button class="small" style="margin-top:6px" disabled={!store.config?.library_path || store.loading} onclick={() => (store.gitDialog = {})}>Récupérer…</button>
+    <button class="small" style="margin-top:6px" disabled={!store.config?.library_path} onclick={() => (store.registryOpen = true)}>
+      Tags et catégories…{#if store.unknownCount > 0} <span class="unknown-count" title="Valeurs absentes du référentiel">{store.unknownCount}</span>{/if}
+    </button>
     {#if store.kind === "agent" && store.config?.agents_path}
       <div class="muted path" style="margin-top:6px">Dossier d’agents personnalisé : {store.config.agents_path}</div>
     {/if}
@@ -154,6 +157,10 @@
 {/if}
 
 <style>
+  .unknown-count {
+    color: var(--warn);
+    font-weight: 600;
+  }
   .sidebar {
     width: 240px;
     flex: none;

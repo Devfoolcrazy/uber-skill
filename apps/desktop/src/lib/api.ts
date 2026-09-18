@@ -161,6 +161,9 @@ export interface InstallationPlan {
   items: { id: string; source: string; hash: string; source_state: SourceState }[];
   git: GitSyncStatus | null; git_error: ErrorPayload | null; warnings: HostMismatch[];
 }
+export type Facet = "category" | "tag";
+export interface ValueUsage { value: string; known: boolean; items: { kind: ItemKind; id: string }[] }
+export interface RegistryView { path: string; exists: boolean; categories: ValueUsage[]; tags: ValueUsage[] }
 export interface InstallRequest { kind: ItemKind; ids: string[]; project: string; target: Target }
 
 export const api = {
@@ -173,6 +176,13 @@ export const api = {
   checkLibraryGit: () => invoke<GitSyncStatus>("check_library_git"),
   updateLibraryGit: (snapshot: string) => invoke<GitSyncStatus>("update_library_git", { snapshot }),
   prepareInstall: (kind: ItemKind, ids: string[], target: Target) => invoke<InstallationPlan>("prepare_install", { kind, ids, target }),
+  getRegistry: () => invoke<RegistryView>("get_registry"),
+  registryInit: () => invoke<RegistryView>("registry_init"),
+  registryAdd: (facet: Facet, value: string) => invoke<RegistryView>("registry_add", { facet, value }),
+  registryRename: (facet: Facet, from: string, to: string) => invoke<RegistryView>("registry_rename", { facet, from, to }),
+  /// `replacement` re-tags the items still using the value, `strip` removes it from them.
+  registryRemove: (facet: Facet, value: string, replacement: string | null, strip: boolean) =>
+    invoke<RegistryView>("registry_remove", { facet, value, replacement, strip }),
   setAgentsLibrary: (path: string | null) => invoke<Config>("set_agents_library", { path }),
   setEditor: (command: string | null) => invoke<Config>("set_editor", { command }),
   rememberProject: (path: string, target: Target) => invoke<Config>("remember_project", { path, target }),

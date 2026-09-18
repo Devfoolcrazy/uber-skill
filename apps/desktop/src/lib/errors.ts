@@ -62,6 +62,8 @@ const MESSAGES: Record<string, string> = {
   "input.unknown-selection": "La sélection contient un fichier absent de l’aperçu.",
   "input.empty-commit-message": "Le message de commit ne peut pas être vide.",
   "input.nothing-to-publish": "Sélectionnez des fichiers à publier. Aucun commit local n’est en attente.",
+  "input.registry-value": "Valeur invalide : elle ne peut pas être vide, et un tag ne contient pas de virgule.",
+  "input.registry-value-in-use": "Cette valeur est encore utilisée. Choisissez un remplacement ou son retrait des éléments concernés.",
 };
 
 function isPayload(e: unknown): e is ErrorPayload {

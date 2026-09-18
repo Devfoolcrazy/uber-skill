@@ -95,6 +95,7 @@
       <form class="settings" onsubmit={(e) => { e.preventDefault(); saveEditor(); }}>
         <label>Éditeur externe <input type="text" placeholder="code (par défaut)" bind:value={editorDraft} /></label>
         <div class="muted">Commande suivie du chemin à ouvrir.</div>
+        <button type="button" class="small" disabled={!store.config?.library_path} onclick={() => { settingsOpen = false; store.registryOpen = true; }}>Bibliothèque : tags et catégories…</button>
         <div class="row">
           <button type="submit" class="small primary">Enregistrer</button>
           <button type="button" class="small" onclick={() => (settingsOpen = false)}>Annuler</button>

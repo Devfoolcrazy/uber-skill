@@ -3,10 +3,12 @@ import {
   hostKind,
   targetSupports,
   type Config,
+  type Facet,
   type InstalledSkill,
   type InstallRequest,
   type ItemKind,
   type LibraryView,
+  type RegistryView,
   type Skill,
   type Target,
 } from "./api";
@@ -47,6 +49,26 @@ class AppStore {
   libraryGeneration = $state(0);
   editorDirty = $state(false);
   gitDialog = $state<{ install?: InstallRequest } | null>(null);
+  /// Allowed categories and tags of the library, merged with the values in use.
+  registry = $state<RegistryView | null>(null);
+  registryOpen = $state(false);
+
+  async refreshRegistry() {
+    this.registry = this.config?.library_path ? await api.getRegistry().catch(() => null) : null;
+  }
+
+  usages(facet: Facet) {
+    return (facet === "category" ? this.registry?.categories : this.registry?.tags) ?? [];
+  }
+
+  /// Without a registry every value is accepted.
+  isKnown(facet: Facet, value: string): boolean {
+    return this.usages(facet).find((u) => u.value === value)?.known ?? !this.registry?.exists;
+  }
+
+  get unknownCount(): number {
+    return [...this.usages("category"), ...this.usages("tag")].filter((u) => !u.known).length;
+  }
 
   requestInstall(ids: string[]) {
     if (!this.projectPath || !this.targetOk) return;
@@ -56,6 +78,7 @@ class AppStore {
   async refreshAfterGit() {
     await this.refreshLibrary("skill");
     await this.refreshLibrary("agent");
+    await this.refreshRegistry();
     this.libraryGeneration++;
     await this.refreshProject();
   }
@@ -166,6 +189,7 @@ class AppStore {
       if (this.config.library_path) {
         await this.refreshLibrary("skill");
         await this.refreshLibrary("agent").catch(this.fail.bind(this));
+        await this.refreshRegistry();
       }
       const recent = this.config.recent_projects[0];
       if (recent && (await api.pathExists(recent.path))) {
@@ -221,6 +245,7 @@ class AppStore {
         this.query = "";
         await this.refreshLibrary("skill", false);
         await this.refreshLibrary("agent", false);
+        await this.refreshRegistry();
         await this.refreshProject();
         return true;
       });

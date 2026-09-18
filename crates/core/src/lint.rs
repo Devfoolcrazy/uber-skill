@@ -9,7 +9,8 @@ use crate::error::Result;
 use crate::frontmatter::SkillDoc;
 use crate::fsutil;
 use crate::library::{main_file, validate_id};
-use crate::model::ItemKind;
+use crate::model::{ItemKind, Skill};
+use crate::registry::{Facet, Registry};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
@@ -192,6 +193,24 @@ pub fn lint_item(path: &Path, kind: ItemKind) -> Result<Vec<Issue>> {
 
     issues.sort_by_key(|i| std::cmp::Reverse(i.severity));
     Ok(issues)
+}
+
+/// Values the library's registry does not list. Warnings only: the registry
+/// never rejects an item.
+pub fn lint_registry(item: &Skill, registry: &Registry) -> Vec<Issue> {
+    let unknown = |facet, rule, what: &str, value: &String| {
+        (!registry.allows(facet, value)).then(|| Issue {
+            severity: Severity::Warning,
+            rule,
+            message: format!("{what} `{value}` is not in the library registry"),
+        })
+    };
+    let category = item
+        .category
+        .iter()
+        .filter_map(|c| unknown(Facet::Category, "category", "category", c));
+    let tags = item.tags.iter().filter_map(|t| unknown(Facet::Tag, "tags", "tag", t));
+    category.chain(tags).collect()
 }
 
 #[cfg(test)]

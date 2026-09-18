@@ -9,6 +9,7 @@
   import ProjectDrawer from "$lib/components/ProjectDrawer.svelte";
   import SelectionBar from "$lib/components/SelectionBar.svelte";
   import GitSyncDialog from "$lib/components/GitSyncDialog.svelte";
+  import LibrarySettings from "$lib/components/LibrarySettings.svelte";
 
   onMount(() => {
     store.init();
@@ -28,6 +29,9 @@
 
 <ProjectDrawer />
 <SelectionBar />
+{#if store.registryOpen}
+  <LibrarySettings onclose={() => (store.registryOpen = false)} />
+{/if}
 {#if store.gitDialog}
   <GitSyncDialog request={store.gitDialog.install} onclose={() => (store.gitDialog = null)} />
 {/if}

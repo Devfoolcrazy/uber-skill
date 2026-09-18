@@ -5,9 +5,10 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
+use uber_skill_core::registry::{self, Facet, OnUsed};
 use uber_skill_core::{
     git, install, lint, search, Config, Error, ErrorPayload, FileDiff, InstalledSkill, Issue, ItemKind, Library,
-    LockEntry, Query, Skill, Target,
+    LockEntry, Query, Registry, RegistryView, Skill, Target,
 };
 
 struct AppState {
@@ -163,6 +164,45 @@ async fn prepare_install(
 }
 
 #[tauri::command]
+fn get_registry(state: State<AppState>) -> CmdResult<RegistryView> {
+    let cfg = state.config.lock().map_err(err)?.clone();
+    registry::view(&cfg).map_err(err)
+}
+
+#[tauri::command]
+fn registry_init(state: State<AppState>) -> CmdResult<RegistryView> {
+    let cfg = state.config.lock().map_err(err)?.clone();
+    registry::init(&cfg).map_err(err)
+}
+
+#[tauri::command]
+fn registry_add(state: State<AppState>, facet: Facet, value: String) -> CmdResult<RegistryView> {
+    let cfg = state.config.lock().map_err(err)?.clone();
+    registry::add(&cfg, facet, &value).map_err(err)
+}
+
+#[tauri::command]
+fn registry_rename(state: State<AppState>, facet: Facet, from: String, to: String) -> CmdResult<RegistryView> {
+    let cfg = state.config.lock().map_err(err)?.clone();
+    registry::rename(&cfg, facet, &from, &to).map_err(err)
+}
+
+/// `replacement`: a value to give the items still using `value`; `strip` removes
+/// it from them instead. With neither, a value still in use is refused.
+#[tauri::command]
+fn registry_remove(
+    state: State<AppState>,
+    facet: Facet,
+    value: String,
+    replacement: Option<String>,
+    strip: bool,
+) -> CmdResult<RegistryView> {
+    let cfg = state.config.lock().map_err(err)?.clone();
+    let on_used = replacement.map(OnUsed::ReplaceWith).or(strip.then_some(OnUsed::Strip));
+    registry::remove(&cfg, facet, &value, on_used).map_err(err)
+}
+
+#[tauri::command]
 fn set_agents_library(state: State<AppState>, path: Option<PathBuf>) -> CmdResult<Config> {
     if let Some(p) = &path {
         Library::open_kind(p, ItemKind::Agent).map_err(err)?;
@@ -287,7 +327,12 @@ fn import_skill(state: State<AppState>, kind: ItemKind, path: PathBuf, new_id: O
 fn lint_skill(state: State<AppState>, kind: ItemKind, id: String) -> CmdResult<Vec<Issue>> {
     let lib = open_library(&state, kind)?;
     let skill = lib.get(&id).map_err(err)?;
-    lint::lint_item(&skill.path, skill.kind).map_err(err)
+    let mut issues = lint::lint_item(&skill.path, skill.kind).map_err(err)?;
+    let root = state.config.lock().map_err(err)?.library_path().map_err(err)?;
+    if let Some(registry) = Registry::load(&root).map_err(err)? {
+        issues.extend(lint::lint_registry(&skill, &registry));
+    }
+    Ok(issues)
 }
 
 #[tauri::command]
@@ -415,6 +460,11 @@ pub fn run() {
             check_library_git,
             update_library_git,
             prepare_install,
+            get_registry,
+            registry_init,
+            registry_add,
+            registry_rename,
+            registry_remove,
             set_agents_library,
             set_editor,
             remember_project,

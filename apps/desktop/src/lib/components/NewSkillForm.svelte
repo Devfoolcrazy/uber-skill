@@ -2,6 +2,7 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { api } from "$lib/api";
   import { store } from "$lib/store.svelte";
+  import MetaFields from "./MetaFields.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
   let id = $state("");
@@ -24,6 +25,7 @@
     );
     if (s) {
       store.replaceSkill(s);
+      await store.refreshRegistry();
       store.selectedId = s.id;
       onclose();
     }
@@ -38,6 +40,7 @@
     const s = await store.run(store.kind === "skill" ? "Skill importé" : "Agent importé", () => api.importSkill(store.kind, dir, null));
     if (s) {
       store.replaceSkill(s);
+      await store.refreshRegistry();
       store.selectedId = s.id;
       onclose();
     }
@@ -47,14 +50,8 @@
 <form class="new" onsubmit={(e) => { e.preventDefault(); if (idOk) create(); }}>
   <input type="text" placeholder={store.kind === "skill" ? "identifiant (ex: review-pr)" : "identifiant (ex: reviewer)"} bind:value={id} class:bad={id && !idOk} />
   <input type="text" placeholder="description" bind:value={description} />
-  <div class="row">
-    <input type="text" placeholder="catégorie" bind:value={category} list="cats" />
-    <input type="text" placeholder="tags, séparés, par, virgules" bind:value={tags} />
-  </div>
+  <MetaFields bind:category bind:tags />
   <input type="text" placeholder="harnais requis (vide = universel) : claude-code, codex…" bind:value={hosts} />
-  <datalist id="cats">
-    {#each store.library?.categories ?? [] as c}<option value={c}></option>{/each}
-  </datalist>
   <div class="row">
     <button type="submit" class="small primary" disabled={!idOk}>Créer</button>
     <button type="button" class="small" onclick={importDir}>{store.kind === "skill" ? "Importer un dossier…" : "Importer un fichier…"}</button>
@@ -71,10 +68,6 @@
     padding: 10px;
     border-bottom: 1px solid var(--border);
     background: var(--panel-2);
-  }
-  .row input {
-    flex: 1;
-    min-width: 0;
   }
   .bad {
     border-color: var(--danger);

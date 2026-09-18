@@ -6,8 +6,8 @@ Avancer étape par étape : chaque livraison doit être testée par l’utilisat
 
 1. **Ouverture d’une bibliothèque Git locale et clonage depuis une URL : implémentés et validés par l’utilisateur.** Interface « Ouvrir / Cloner… » commune aux skills et agents, validation de la racine Git, destination de clonage nouvelle uniquement, réinitialisation de l’ancien chemin d’agents personnalisé, choix conservé au prochain lancement. Les bibliothèques préexistantes sans Git restent lisibles au démarrage.
 2. **Publication Git : implémentée et validée par l’utilisateur.** Aperçu, sélection par fichier, message prérempli modifiable, commit/push explicite et nouvel essai du push sans commit supplémentaire.
-3. **Récupération Git et vérification de fraîcheur avant installation : implémentées dans l’application, en attente du test utilisateur.** Fetch de la branche distante configurée, compteur de commits locaux/distants, mise à jour en avance rapide et choix explicite d’une installation locale. Contrôle commun aux installations unitaires, groupées, agents et réinstallations depuis le tiroir.
-4. Référentiel de tags/catégories et administration : à implémenter.
+3. **Récupération Git et vérification de fraîcheur avant installation : implémentées et validées par l’utilisateur.** Fetch de la branche distante configurée, compteur de commits locaux/distants, mise à jour en avance rapide et choix explicite d’une installation locale. Contrôle commun aux installations unitaires, groupées, agents et réinstallations depuis le tiroir.
+4. **Référentiel de tags/catégories et administration : implémentés, en attente du test utilisateur.** Fichier `uber-skill.yaml` versionné à la racine, commun aux skills et agents, tolérant aux valeurs inconnues ; page « Tags et catégories » (ajout, renommage partout, suppression avec remplacement ou retrait explicite, mise en correspondance des valeurs inconnues) ; sélecteurs dans l’éditeur et le formulaire de création ; avertissements de lint ; commandes CLI `registry`.
 5. Création de skills/agents avec templates intégrés : à compléter selon les décisions ci-dessous.
 6. Raffinement assisté du `SKILL.md` : à implémenter.
 7. Passe UI/UX : après validation du fonctionnel.
@@ -23,7 +23,22 @@ Vérifications effectuées : `cargo test` (13 tests réussis, dont 3 tests Git s
 
 ### Retours UI/UX à traiter lors de la passe finale
 
-Aucun retour consigné pour le moment.
+- Relevé pendant l’étape 4 : les messages de lint et les avertissements de scan sont encore rédigés en anglais dans le `core` et affichés tels quels dans l’application. Les traduire côté application à partir de `rule`, selon la convention des codes d’erreur.
+
+### Test utilisateur de l’étape 4
+
+Vérifications effectuées : suite Rust complète (43 tests, dont 7 sur le référentiel et 2 sur l’édition ciblée du frontmatter), `pnpm check` sans erreur ni avertissement, 31 tests d’interface (dont les sélecteurs et la page d’administration, avec passerelle Tauri simulée), parcours CLI complet sur une bibliothèque temporaire. L’interface n’a pas été essayée dans l’application réelle.
+
+- Ouvrir « Tags et catégories… » sur une bibliothèque sans `uber-skill.yaml` : vérifier l’explication, puis « Créer le référentiel à partir des valeurs utilisées » et le contenu du fichier créé.
+- Ajouter une catégorie et un tag ; vérifier qu’ils apparaissent dans les sélecteurs de l’éditeur de métadonnées et du formulaire « Nouveau ».
+- Renommer un tag utilisé par un skill et un agent : vérifier les deux fichiers, le référentiel, les filtres de la barre latérale, puis le diff dans « Publier… » (seules les lignes `tags`/`category` doivent changer lorsque le frontmatter est simple).
+- Renommer vers un nom déjà existant : les deux valeurs doivent fusionner.
+- Supprimer une valeur utilisée : le bouton reste désactivé sans choix ; tester « Remplacer par… » puis « Retirer des éléments ». Supprimer une valeur inutilisée.
+- Ajouter à la main un tag inconnu dans un `SKILL.md` : vérifier le compteur dans la barre latérale, le marquage dans le détail, l’avertissement dans l’onglet Lint, puis « Ajouter au référentiel » et « Remplacer… ». Vérifier qu’un élément portant une valeur inconnue reste éditable et que la valeur est conservée tant qu’elle n’est pas retirée.
+- Avec des modifications non enregistrées dans l’éditeur : vérifier que renommer, remplacer ou retirer une valeur utilisée est désactivé, mais qu’ajouter une valeur reste possible.
+- Récupérer une mise à jour distante qui modifie `uber-skill.yaml` : vérifier que les sélecteurs suivent.
+
+Limites de cette étape : pas de description ni de couleur par valeur ; les harnais (`hosts`) ne font pas partie du référentiel ; un frontmatter avec des tags en liste YAML ou des clés historiques au niveau racine est re-sérialisé en entier lors d’une modification.
 
 ### Test utilisateur de l’étape 2
 

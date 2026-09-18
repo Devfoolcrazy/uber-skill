@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { vi } from "vitest";
-import type { GitSyncStatus, InstallationPlan, LibraryView, PublicationPreview, Skill } from "$lib/api";
+import type { GitSyncStatus, InstallationPlan, LibraryView, PublicationPreview, RegistryView, Skill, ValueUsage } from "$lib/api";
 
 type Handler = (args: Record<string, unknown>) => unknown;
 
@@ -31,6 +31,19 @@ export function libraryView(skills: Skill[], over: Partial<LibraryView> = {}): L
     kind: "skill", root: "/lib/skills", skills, warnings: [],
     tags: [...new Set(skills.flatMap((s) => s.tags))].sort(),
     categories: [...new Set(skills.flatMap((s) => (s.category ? [s.category] : [])))].sort(),
+    ...over,
+  };
+}
+
+export function usage(value: string, known: boolean, ids: string[] = []): ValueUsage {
+  return { value, known, items: ids.map((id) => ({ kind: "skill", id })) };
+}
+
+export function registryView(over: Partial<RegistryView> = {}): RegistryView {
+  return {
+    path: "/lib/uber-skill.yaml", exists: true,
+    categories: [usage("review", true, ["one"]), usage("writing", true)],
+    tags: [usage("git", true, ["one", "two"]), usage("quality", true), usage("legacy", false, ["two"])],
     ...over,
   };
 }

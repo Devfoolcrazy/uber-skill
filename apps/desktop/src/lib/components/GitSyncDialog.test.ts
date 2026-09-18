@@ -10,6 +10,7 @@ const button = (name: string) => screen.getByRole("button", { name, hidden: true
 const refreshes = {
   scan_library: () => libraryView([skill("one")]),
   project_status: () => [],
+  get_registry: () => null,
 };
 
 beforeEach(() => {

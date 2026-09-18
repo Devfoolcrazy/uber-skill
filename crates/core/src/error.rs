@@ -78,6 +78,10 @@ pub enum InputError {
     EmptyCommitMessage,
     #[error("no file selected and no local commit to push")]
     NothingToPublish,
+    #[error("invalid category or tag: {0:?}")]
+    RegistryValue(String),
+    #[error("{0} is still used: replace it or strip it from the items using it")]
+    RegistryValueInUse(String),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -174,6 +178,8 @@ impl Error {
                 InputError::UnknownSelection => "input.unknown-selection",
                 InputError::EmptyCommitMessage => "input.empty-commit-message",
                 InputError::NothingToPublish => "input.nothing-to-publish",
+                InputError::RegistryValue(_) => "input.registry-value",
+                InputError::RegistryValueInUse(_) => "input.registry-value-in-use",
             },
             Error::NotADirectory(_) => "not-a-directory",
             Error::Json(_) => "json",
@@ -194,6 +200,9 @@ impl Error {
             Error::InvalidInput(InputError::NotRepositoryRoot(root)) => Some(root.display().to_string()),
             Error::InvalidInput(InputError::CloneDestination { path, reason }) => {
                 Some(format!("{} : {reason}", path.display()))
+            }
+            Error::InvalidInput(InputError::RegistryValue(value) | InputError::RegistryValueInUse(value)) => {
+                Some(value.clone())
             }
             Error::NotADirectory(path) => Some(path.display().to_string()),
             Error::Json(e) => Some(e.to_string()),
@@ -290,6 +299,8 @@ mod tests {
             InputError::UnknownSelection,
             InputError::EmptyCommitMessage,
             InputError::NothingToPublish,
+            InputError::RegistryValue("a, b".into()),
+            InputError::RegistryValueInUse("git".into()),
         ] {
             all.push(Error::InvalidInput(input));
         }

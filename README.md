@@ -19,7 +19,8 @@ apps/desktop     app Tauri v2 + SvelteKit
 - **Installer** : copie le skill dans le projet (`.claude/skills`, `.agents/skills`, `.cursor/skills`, `.github/skills` ou un dossier custom) et écrit un verrou `.uber-skill.lock.json` avec la source et le hash du contenu.
 - **Dérive** : à partir du verrou, chaque skill installé est `up-to-date`, `library-updated`, `project-modified`, `conflict`, `untracked`, `missing` ou `source-missing`. On peut voir le diff, tirer la version bibliothèque (`pull`) ou remonter la version projet (`push`).
 - **Harnais** : un skill est universel par défaut. S'il dépend d'un outil (frontmatter `allowed-tools`, outils MCP, sous-agents…), on le déclare dans `metadata.hosts` (`claude-code`, `codex`, `cursor`, `copilot`). L'app filtre dessus et avertit à l'installation si la cible ne correspond pas.
-- **Lint** : nom = dossier, description présente et < 1024 caractères, corps non vide, liens relatifs existants, hosts connus.
+- **Référentiel** : `uber-skill.yaml` à la racine de la bibliothèque liste les catégories et tags autorisés, communs aux skills et aux agents, et versionnés avec eux. Il est tolérant : une valeur absente du référentiel ne bloque ni le scan, ni l'import, ni l'édition ; elle est seulement signalée comme inconnue. Sans ce fichier, toutes les valeurs sont acceptées.
+- **Lint** : nom = dossier, description présente et < 1024 caractères, corps non vide, liens relatifs existants, hosts connus, catégorie et tags présents dans le référentiel (avertissement).
 
 Frontmatter reconnu :
 
@@ -54,6 +55,13 @@ cargo build -p uber-skill-cli
 ./target/debug/uber-skill -k agent list
 ./target/debug/uber-skill -k agent install coder reviewer -p ~/mon/projet
 ./target/debug/uber-skill -k agent status -p ~/mon/projet
+
+# Référentiel de catégories et de tags (uber-skill.yaml)
+./target/debug/uber-skill registry show                      # valeurs autorisées, inconnues, et leur usage
+./target/debug/uber-skill registry init                      # crée le référentiel à partir des valeurs utilisées
+./target/debug/uber-skill registry add tag quality
+./target/debug/uber-skill registry rename tag quality rigor  # met aussi à jour les skills et agents
+./target/debug/uber-skill registry remove tag git --replace-with rigor   # ou --strip
 
 # Dépôt Git de la bibliothèque
 ./target/debug/uber-skill remote status                      # fetch + commits et fichiers en attente
@@ -142,6 +150,22 @@ Côté CLI, `remote status`, `remote update` et `remote publish` appliquent les 
 l’application (suivi distant configuré, avance rapide uniquement, aucun push forcé). `install` reste
 une copie locale sans vérification de fraîcheur : lancer `remote status` avant si nécessaire. Remonter une copie projet vers la bibliothèque reste un enregistrement
 local ; sa publication Git est une action séparée.
+
+### Tags et catégories
+
+**Tags et catégories…** (barre latérale, ou ⚙ › Bibliothèque) administre le référentiel : ajouter une
+valeur, la renommer partout où elle est utilisée (un nom déjà existant fusionne les deux valeurs), la
+supprimer. Supprimer une valeur encore utilisée demande un choix explicite : la remplacer par une autre ou
+la retirer des éléments concernés. Les valeurs inconnues, trouvées dans des skills ou agents mais absentes
+du référentiel, peuvent être ajoutées au référentiel ou remplacées par une valeur autorisée ; tant
+qu’aucun choix n’est fait, elles sont conservées telles quelles.
+
+Dès que le référentiel existe, l’éditeur de métadonnées et le formulaire de création proposent des
+sélecteurs de valeurs autorisées ; les valeurs inconnues déjà présentes sur un élément restent visibles et
+peuvent être retirées. Les renommages et remplacements ne réécrivent que les lignes `tags` et `category`
+du frontmatter lorsque c’est possible, pour garder des différences Git lisibles. Tout est enregistré sur
+disque ; la publication reste l’action **Publier…**. Les opérations qui réécrivent des skills ou agents
+sont désactivées tant que l’éditeur contient des modifications non enregistrées.
 
 ## Erreurs et libellés
 

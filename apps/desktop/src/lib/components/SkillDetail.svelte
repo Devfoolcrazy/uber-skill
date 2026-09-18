@@ -3,6 +3,7 @@
   import { marked } from "marked";
   import { api, splitFrontmatter, type Issue, type Skill } from "$lib/api";
   import { store, DRIFT_LABEL } from "$lib/store.svelte";
+  import MetaFields from "./MetaFields.svelte";
 
   type Tab = "preview" | "edit" | "files" | "lint";
   let tab = $state<Tab>("preview");
@@ -109,6 +110,7 @@
     );
     if (s) {
       store.replaceSkill(s);
+      await store.refreshRegistry();
       metaOpen = false;
       if (isMain) await load(s, mainFile(s));
       issues = null;
@@ -122,6 +124,7 @@
     if (ok !== undefined) {
       store.selectedId = null;
       await store.refreshLibrary();
+      await store.refreshRegistry();
     }
   }
 
@@ -144,7 +147,7 @@
     <header>
       <div class="row">
         <h2 class="selectable">{skill.id}</h2>
-        {#if skill.category}<span class="chip cat">{skill.category}</span>{/if}
+        {#if skill.category}<span class="chip cat" class:unknown={!store.isKnown("category", skill.category)} title={store.isKnown("category", skill.category) ? undefined : "Catégorie absente du référentiel"}>{skill.category}</span>{/if}
         <span class="spacer"></span>
         {#if store.projectPath}
           {#if !installed}
@@ -166,7 +169,7 @@
       </div>
       <p class="desc selectable">{skill.description}</p>
       <div class="wrap">
-        {#each skill.tags as t}<span class="chip">{t}</span>{/each}
+        {#each skill.tags as t}<span class="chip" class:unknown={!store.isKnown("tag", t)} title={store.isKnown("tag", t) ? undefined : "Tag absent du référentiel"}>{t}</span>{/each}
         {#if skill.hosts.length}
           <span class="chip host" title="Ce skill dépend de ce(s) harnais">harnais : {skill.hosts.join(", ")}</span>
         {:else}
@@ -177,14 +180,8 @@
       {#if metaOpen}
         <form class="meta" onsubmit={(e) => { e.preventDefault(); saveMeta(); }}>
           <label>Description <input type="text" bind:value={descDraft} /></label>
-          <div class="row">
-            <label>Catégorie <input type="text" bind:value={categoryDraft} list="cats-detail" /></label>
-            <label>Tags <input type="text" bind:value={tagsDraft} placeholder="a, b, c" /></label>
-          </div>
+          <MetaFields bind:category={categoryDraft} bind:tags={tagsDraft} />
           <label>Harnais requis <input type="text" bind:value={hostsDraft} placeholder="vide = universel ; sinon claude-code, codex, cursor, copilot" /></label>
-          <datalist id="cats-detail">
-            {#each store.library?.categories ?? [] as c}<option value={c}></option>{/each}
-          </datalist>
           <div class="row">
             <button type="submit" class="small primary">Enregistrer</button>
             <button type="button" class="small" onclick={() => (metaOpen = false)}>Annuler</button>
@@ -272,6 +269,10 @@
   .desc {
     margin: 0;
     color: var(--muted);
+  }
+  .chip.unknown {
+    outline: 1px dashed var(--warn);
+    color: var(--warn);
   }
   .chip.host {
     color: var(--warn);

@@ -2,7 +2,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand};
-use uber_skill_core::{git, install, lint, search, Config, DriftState, ItemKind, Library, Query, Target};
+use uber_skill_core::registry::{self, Facet, OnUsed};
+use uber_skill_core::{
+    git, install, lint, search, Config, DriftState, ItemKind, Library, Query, Registry, RegistryView, Target,
+};
 
 #[derive(Parser)]
 #[command(name = "uber-skill", version, about = "Manage a library of agent skills")]
@@ -146,6 +149,44 @@ enum Cmd {
         #[command(subcommand)]
         cmd: RemoteCmd,
     },
+    /// Allowed categories and tags (uber-skill.yaml at the library root)
+    Registry {
+        #[command(subcommand)]
+        cmd: RegistryCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum RegistryCmd {
+    /// Show allowed and unknown values with the number of items using them
+    Show,
+    /// Create the registry from the values already in use
+    Init,
+    /// Allow a value (also accepts an unknown value found in the library)
+    Add {
+        #[arg(value_parser = ["category", "tag"])]
+        facet: String,
+        value: String,
+    },
+    /// Rename a value in the registry and in every skill and agent using it
+    Rename {
+        #[arg(value_parser = ["category", "tag"])]
+        facet: String,
+        from: String,
+        to: String,
+    },
+    /// Remove a value; one still in use needs --replace-with or --strip
+    Remove {
+        #[arg(value_parser = ["category", "tag"])]
+        facet: String,
+        value: String,
+        /// Give the items using it this value instead
+        #[arg(long, conflicts_with = "strip")]
+        replace_with: Option<String>,
+        /// Remove it from the items using it
+        #[arg(long)]
+        strip: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -205,6 +246,27 @@ fn repository(cli: &Cli) -> Result<PathBuf> {
         None => Config::load()?
             .library_path()
             .context("no library configured: run `uber-skill config set-library <path>` or pass --library"),
+    }
+}
+
+fn facet_of(name: &str) -> Facet {
+    if name == "category" {
+        Facet::Category
+    } else {
+        Facet::Tag
+    }
+}
+
+fn print_registry(view: &RegistryView) {
+    if !view.exists {
+        println!("no registry yet ({}): every value is accepted", view.path.display());
+    }
+    for (title, usages) in [("categories", &view.categories), ("tags", &view.tags)] {
+        println!("{title}:");
+        for u in usages {
+            let unknown = if u.known { "" } else { "  (unknown)" };
+            println!("  {:<28}{:>3} item(s){unknown}", u.value, u.items.len());
+        }
     }
 }
 
@@ -450,10 +512,17 @@ fn main() -> Result<()> {
                 Some(id) => vec![lib.get(id)?],
                 None => lib.scan()?.skills,
             };
+            let registry = match repository(&cli) {
+                Ok(root) => Registry::load(&root)?,
+                Err(_) => None,
+            };
             let mut total_errors = 0;
             let mut report = Vec::new();
             for s in &skills {
-                let issues = lint::lint_item(&s.path, s.kind)?;
+                let mut issues = lint::lint_item(&s.path, s.kind)?;
+                if let Some(registry) = &registry {
+                    issues.extend(lint::lint_registry(s, registry));
+                }
                 total_errors += issues.iter().filter(|i| i.severity == lint::Severity::Error).count();
                 if cli.json {
                     report.push(serde_json::json!({ "id": s.id, "issues": issues }));
@@ -569,6 +638,37 @@ fn main() -> Result<()> {
             let (root, target) = project_root(project)?;
             install::adopt(&lib, id, &root, &target)?;
             println!("adopted {id}");
+        }
+        Cmd::Registry { cmd } => {
+            let cfg = match &cli.library {
+                Some(root) => Config {
+                    library_path: Some(root.clone()),
+                    ..Config::default()
+                },
+                None => Config::load()?,
+            };
+            let view = match cmd {
+                RegistryCmd::Show => registry::view(&cfg)?,
+                RegistryCmd::Init => registry::init(&cfg)?,
+                RegistryCmd::Add { facet, value } => registry::add(&cfg, facet_of(facet), value)?,
+                RegistryCmd::Rename { facet, from, to } => registry::rename(&cfg, facet_of(facet), from, to)?,
+                RegistryCmd::Remove {
+                    facet,
+                    value,
+                    replace_with,
+                    strip,
+                } => {
+                    let on_used = match replace_with {
+                        Some(to) => Some(OnUsed::ReplaceWith(to.clone())),
+                        None => strip.then_some(OnUsed::Strip),
+                    };
+                    registry::remove(&cfg, facet_of(facet), value, on_used)?
+                }
+            };
+            if cli.json {
+                return print_json(&view);
+            }
+            print_registry(&view);
         }
         Cmd::Remote { cmd } => {
             let root = repository(&cli)?;
