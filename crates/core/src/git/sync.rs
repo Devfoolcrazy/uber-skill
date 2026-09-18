@@ -1,7 +1,6 @@
 //! Fetch the configured upstream and apply reviewed fast-forward updates only.
 
-use super::publication::{config, git, optional};
-use super::{repository_root, run, OPERATION_LOCK};
+use super::{config, git, interruption, optional, repository_root, run, Interruption, OPERATION_LOCK};
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -73,21 +72,14 @@ pub fn inspect(path: &Path) -> Result<SyncStatus> {
             .blocked
             .get_or_insert("Aucune branche distante de suivi utilisable. Configurez-la dans votre outil Git.".into());
     }
-    for marker in [
-        "MERGE_HEAD",
-        "CHERRY_PICK_HEAD",
-        "REVERT_HEAD",
-        "rebase-merge",
-        "rebase-apply",
-        "sequencer",
-    ] {
-        let location = run(git(&root).args(["rev-parse", "--path-format=absolute", "--git-path", marker]))?;
-        if Path::new(&location).exists() {
-            status.blocked = Some("Une opération Git est en cours. Terminez-la dans votre outil Git.".into());
+    match interruption(&root)? {
+        Some(Interruption::Operation) => {
+            status.blocked = Some("Une opération Git est en cours. Terminez-la dans votre outil Git.".into())
         }
-    }
-    if !run(git(&root).args(["ls-files", "--unmerged", "-z"]))?.is_empty() {
-        status.blocked = Some("Des conflits restent à résoudre dans votre outil Git.".into());
+        Some(Interruption::Conflicts) => {
+            status.blocked = Some("Des conflits restent à résoudre dans votre outil Git.".into())
+        }
+        None => {}
     }
     let changed = run(git(&root).args([
         "status",

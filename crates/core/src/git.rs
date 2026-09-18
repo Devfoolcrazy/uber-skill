@@ -39,6 +39,58 @@ fn run(cmd: &mut Command) -> Result<String> {
         .to_owned())
 }
 
+fn git(root: &Path) -> Command {
+    let mut cmd = command();
+    cmd.arg("--literal-pathspecs").arg("-C").arg(root);
+    cmd.env("GIT_OPTIONAL_LOCKS", "0");
+    cmd
+}
+
+fn optional(cmd: &mut Command) -> Result<Option<String>> {
+    let output = cmd.output().map_err(|e| Error::io("git", e))?;
+    if output.status.success() {
+        Ok(Some(
+            String::from_utf8_lossy(&output.stdout)
+                .trim_end_matches(['\r', '\n'])
+                .to_owned(),
+        ))
+    } else {
+        Ok(None)
+    }
+}
+
+fn config(root: &Path, key: &str) -> Result<Option<String>> {
+    optional(git(root).args(["config", "--get", key]))
+}
+
+/// A state that only an external Git tool can resolve.
+enum Interruption {
+    /// A merge, rebase, cherry-pick or revert is unfinished.
+    Operation,
+    /// The index holds unresolved conflicts.
+    Conflicts,
+}
+
+fn interruption(root: &Path) -> Result<Option<Interruption>> {
+    if !run(git(root).args(["ls-files", "--unmerged", "-z"]))?.is_empty() {
+        return Ok(Some(Interruption::Conflicts));
+    }
+    for marker in [
+        "MERGE_HEAD",
+        "CHERRY_PICK_HEAD",
+        "REVERT_HEAD",
+        "rebase-merge",
+        "rebase-apply",
+        "sequencer",
+    ] {
+        let location = run(git(root).args(["rev-parse", "--path-format=absolute", "--git-path", marker]))?;
+        if Path::new(&location).exists() {
+            return Ok(Some(Interruption::Operation));
+        }
+    }
+    Ok(None)
+}
+
 /// Require the working-tree root, including linked worktrees; reject bare repos
 /// and subdirectories accidentally belonging to a parent repository.
 pub fn repository_root(path: &Path) -> Result<PathBuf> {

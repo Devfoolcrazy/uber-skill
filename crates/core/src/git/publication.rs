@@ -2,12 +2,11 @@
 
 use std::collections::BTreeSet;
 use std::path::Path;
-use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use super::{command, repository_root, run};
+use super::{config, git, interruption, optional, repository_root, run, Interruption};
 use crate::{Error, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,47 +38,19 @@ pub struct PublicationResult {
     pub push_error: Option<String>,
 }
 
-pub(super) fn git(root: &Path) -> Command {
-    let mut cmd = command();
-    cmd.arg("--literal-pathspecs").arg("-C").arg(root);
-    cmd.env("GIT_OPTIONAL_LOCKS", "0");
-    cmd
-}
-
-pub(super) fn optional(cmd: &mut Command) -> Result<Option<String>> {
-    let output = cmd.output().map_err(|e| Error::io("git", e))?;
-    if output.status.success() {
-        Ok(Some(
-            String::from_utf8_lossy(&output.stdout)
-                .trim_end_matches(['\r', '\n'])
-                .to_owned(),
-        ))
-    } else {
-        Ok(None)
-    }
-}
-
-pub(super) fn config(root: &Path, key: &str) -> Result<Option<String>> {
-    optional(git(root).args(["config", "--get", key]))
-}
-
 pub fn preview(path: &Path) -> Result<Preview> {
     let root = repository_root(path)?;
     let branch = optional(git(&root).args(["symbolic-ref", "--quiet", "--short", "HEAD"]))?;
     let head = optional(git(&root).args(["rev-parse", "--verify", "HEAD"]))?;
-    let remote = match &branch {
-        Some(b) => config(&root, &format!("branch.{b}.remote"))?,
-        None => None,
+    let (remote, remote_branch) = match &branch {
+        Some(b) => (
+            config(&root, &format!("branch.{b}.remote"))?,
+            config(&root, &format!("branch.{b}.merge"))?.and_then(|r| r.strip_prefix("refs/heads/").map(str::to_owned)),
+        ),
+        None => (None, None),
     };
-    let remote_ref = match &branch {
-        Some(b) => config(&root, &format!("branch.{b}.merge"))?,
-        None => None,
-    };
-    let remote_branch = remote_ref
-        .as_deref()
-        .and_then(|r| r.strip_prefix("refs/heads/"))
-        .map(str::to_owned);
-    let mut blocked = if branch.is_none() {
+    // Later checks take precedence: the last reason found is the one reported.
+    let mut blocked: Option<String> = if branch.is_none() {
         Some("HEAD est détachée. Ouvrez une branche dans votre outil Git avant de publier.".into())
     } else if remote.as_deref().is_none_or(|r| r.is_empty() || r == ".") || remote_branch.is_none() {
         Some(
@@ -89,96 +60,23 @@ pub fn preview(path: &Path) -> Result<Preview> {
     } else {
         None
     };
-    let mut push_urls = String::new();
-    if let Some(r) = &remote {
-        if r != "." {
-            match optional(git(&root).args(["remote", "get-url", "--push", "--all", r]))? {
-                Some(urls) if urls.lines().count() == 1 => push_urls = urls,
-                _ => blocked = Some("Le dépôt distant est absent ou comporte plusieurs destinations de push. Configurez une destination unique dans votre outil Git.".into()),
-            }
+    let mut push_url = String::new();
+    if let Some(r) = remote.as_deref().filter(|r| *r != ".") {
+        match single_push_url(&root, r)? {
+            Some(url) => push_url = url,
+            None => blocked = Some("Le dépôt distant est absent ou comporte plusieurs destinations de push. Configurez une destination unique dans votre outil Git.".into()),
         }
     }
-    for marker in [
-        "MERGE_HEAD",
-        "CHERRY_PICK_HEAD",
-        "REVERT_HEAD",
-        "rebase-merge",
-        "rebase-apply",
-        "sequencer",
-    ] {
-        let location = run(git(&root).args(["rev-parse", "--path-format=absolute", "--git-path", marker]))?;
-        if Path::new(&location).exists() {
-            blocked = Some("Une fusion, un rebase ou une autre opération Git est en cours. Terminez-la dans votre outil Git avant de publier.".into());
-        }
+    match interruption(&root)? {
+        Some(Interruption::Operation) => blocked = Some("Une fusion, un rebase ou une autre opération Git est en cours. Terminez-la dans votre outil Git avant de publier.".into()),
+        Some(Interruption::Conflicts) => blocked = Some("Des conflits Git restent à résoudre dans votre outil Git.".into()),
+        None => {}
     }
-    if !run(git(&root).args(["ls-files", "--unmerged", "-z"]))?.is_empty() {
-        blocked = Some("Des conflits Git restent à résoudre dans votre outil Git.".into());
-    }
-
-    let upstream = optional(git(&root).args(["rev-parse", "--verify", "@{upstream}"]))?;
-    let mut pending_count = 0;
-    let mut pending_commits = Vec::new();
-    if let Some(h) = &head {
-        let range = upstream
-            .as_ref()
-            .map(|u| format!("{u}..{h}"))
-            .unwrap_or_else(|| h.clone());
-        pending_count = run(git(&root).args(["rev-list", "--count", &range]))?
-            .parse()
-            .map_err(|_| Error::GitCommand("Nombre de commits Git invalide.".into()))?;
-        pending_commits = run(git(&root).args(["log", "--format=%h %s", "-20", &range, "--"]))?
-            .lines()
-            .map(str::to_owned)
-            .collect();
-    }
-
-    // An isolated index lets Git render additions, deletions, binaries, modes and
-    // clean filters without disturbing any user staging in the real index.
-    let temp = tempfile::tempdir().map_err(|e| Error::io("index temporaire", e))?;
-    let index = temp.path().join("index");
-    let temp_git = || {
-        let mut cmd = git(&root);
-        cmd.env("GIT_INDEX_FILE", &index);
-        cmd
-    };
-    match &head {
-        Some(h) => {
-            run(temp_git().args(["read-tree", h]))?;
-        }
-        None => {
-            run(temp_git().args(["read-tree", "--empty"]))?;
-        }
-    }
-    run(temp_git().args(["add", "--all", "--", "."]))?;
-    let tree = run(temp_git().arg("write-tree"))?;
-    let names = run(temp_git().args(["diff", "--cached", "--name-status", "--no-renames", "-z"]))?;
-    let parts: Vec<_> = names.split('\0').filter(|s| !s.is_empty()).collect();
-    if parts.len() % 2 != 0 {
-        return Err(Error::GitCommand("Liste de fichiers Git invalide.".into()));
-    }
-    let mut files = Vec::new();
-    for pair in parts.chunks_exact(2) {
-        let diff = run(temp_git().args([
-            "diff",
-            "--cached",
-            "--no-ext-diff",
-            "--no-textconv",
-            "--no-color",
-            "--no-renames",
-            "--",
-            pair[1],
-        ]))?;
-        if diff.contains("160000")
-            && run(temp_git().args(["diff", "--cached", "--raw", "--", pair[1]]))?.contains("160000")
-        {
-            blocked =
-                Some("La publication de changements de sous-modules doit être effectuée dans votre outil Git.".into());
-        }
-        files.push(ChangedFile {
-            path: pair[1].to_owned(),
-            status: pair[0].to_owned(),
-            diff,
-        });
+    let (pending_count, pending_commits) = pending(&root, head.as_deref())?;
+    let changes = working_tree_changes(&root, head.as_deref())?;
+    if changes.touches_submodule {
+        blocked =
+            Some("La publication de changements de sous-modules doit être effectuée dans votre outil Git.".into());
     }
     let mut preview = Preview {
         root: root.to_string_lossy().into_owned(),
@@ -188,16 +86,98 @@ pub fn preview(path: &Path) -> Result<Preview> {
         remote_branch,
         pending_count,
         pending_commits,
-        files,
+        files: changes.files,
         snapshot: String::new(),
         blocked,
     };
     let mut hash = Sha256::new();
     hash.update(serde_json::to_vec(&preview)?);
-    hash.update(tree.as_bytes());
-    hash.update(push_urls.as_bytes());
+    hash.update(changes.tree.as_bytes());
+    hash.update(push_url.as_bytes());
     preview.snapshot = hex::encode(hash.finalize());
     Ok(preview)
+}
+
+/// The push URL of `remote`, or None when it is missing or fans out to several.
+fn single_push_url(root: &Path, remote: &str) -> Result<Option<String>> {
+    let urls = optional(git(root).args(["remote", "get-url", "--push", "--all", remote]))?;
+    Ok(urls.filter(|u| u.lines().count() == 1))
+}
+
+/// Local commits not yet on the upstream: their count and the first 20 subjects.
+fn pending(root: &Path, head: Option<&str>) -> Result<(usize, Vec<String>)> {
+    let Some(head) = head else { return Ok((0, Vec::new())) };
+    let upstream = optional(git(root).args(["rev-parse", "--verify", "@{upstream}"]))?;
+    let range = upstream
+        .map(|u| format!("{u}..{head}"))
+        .unwrap_or_else(|| head.to_owned());
+    let count = run(git(root).args(["rev-list", "--count", &range]))?
+        .parse()
+        .map_err(|_| Error::GitCommand("Nombre de commits Git invalide.".into()))?;
+    let commits = run(git(root).args(["log", "--format=%h %s", "-20", &range, "--"]))?
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    Ok((count, commits))
+}
+
+struct WorkingTreeChanges {
+    files: Vec<ChangedFile>,
+    /// Tree of the whole working tree, so the snapshot covers every byte shown.
+    tree: String,
+    touches_submodule: bool,
+}
+
+/// Diff the working tree against HEAD through an isolated index: Git renders
+/// additions, deletions, binaries, modes and clean filters without disturbing
+/// any user staging in the real index.
+fn working_tree_changes(root: &Path, head: Option<&str>) -> Result<WorkingTreeChanges> {
+    let temp = tempfile::tempdir().map_err(|e| Error::io("index temporaire", e))?;
+    let index = temp.path().join("index");
+    let temp_git = || {
+        let mut cmd = git(root);
+        cmd.env("GIT_INDEX_FILE", &index);
+        cmd
+    };
+    run(temp_git().args(["read-tree", head.unwrap_or("--empty")]))?;
+    run(temp_git().args(["add", "--all", "--", "."]))?;
+    let tree = run(temp_git().arg("write-tree"))?;
+    let names = run(temp_git().args(["diff", "--cached", "--name-status", "--no-renames", "-z"]))?;
+    let parts: Vec<_> = names.split('\0').filter(|s| !s.is_empty()).collect();
+    if parts.len() % 2 != 0 {
+        return Err(Error::GitCommand("Liste de fichiers Git invalide.".into()));
+    }
+    let mut files = Vec::new();
+    let mut touches_submodule = false;
+    for pair in parts.chunks_exact(2) {
+        let (status, path) = (pair[0], pair[1]);
+        let diff = run(temp_git().args([
+            "diff",
+            "--cached",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--no-color",
+            "--no-renames",
+            "--",
+            path,
+        ]))?;
+        // 160000 is the gitlink mode; confirm on the raw record, not on file text.
+        if diff.contains("160000")
+            && run(temp_git().args(["diff", "--cached", "--raw", "--", path]))?.contains("160000")
+        {
+            touches_submodule = true;
+        }
+        files.push(ChangedFile {
+            path: path.to_owned(),
+            status: status.to_owned(),
+            diff,
+        });
+    }
+    Ok(WorkingTreeChanges {
+        files,
+        tree,
+        touches_submodule,
+    })
 }
 
 /// Commit only selected files, preserving staging for all unselected paths.

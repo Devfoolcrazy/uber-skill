@@ -1,7 +1,6 @@
 //! Prepare a reviewed installation and reject source changes before copying.
 
-use super::publication::git;
-use super::{run, sync, OPERATION_LOCK};
+use super::{git, run, sync, OPERATION_LOCK};
 use crate::install::{self, SourceState};
 use crate::{Config, Error, ItemKind, Library, LockEntry, Result, Skill, Target};
 use serde::{Deserialize, Serialize};
