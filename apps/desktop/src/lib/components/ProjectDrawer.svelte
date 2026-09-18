@@ -25,7 +25,7 @@
     const t = store.target;
     const a: { label: string; cls?: string; install?: boolean; run: () => Promise<unknown> }[] = [];
     const requestInstall = async () => { store.requestInstall([s.id]); };
-    if (s.state === "library-updated") a.push({ label: "Mettre à jour", cls: "primary", install: true, run: requestInstall });
+    if (s.state === "library-updated") a.push({ label: "Mettre à jour la copie du projet", cls: "primary", install: true, run: requestInstall });
     if (s.state === "project-modified") a.push({ label: "Remonter dans la bibliothèque", cls: "primary", run: () => api.syncSkill(store.kind, s.id, "push", p, t) });
     if (s.state === "conflict") {
       a.push({ label: "Garder la bibliothèque", install: true, run: requestInstall });

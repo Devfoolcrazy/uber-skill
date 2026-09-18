@@ -16,7 +16,7 @@ import { errorText } from "./errors";
 
 export const DRIFT_LABEL: Record<string, string> = {
   "up-to-date": "À jour",
-  "library-updated": "Bibliothèque plus récente",
+  "library-updated": "Copie du projet en retard sur la bibliothèque",
   "project-modified": "Modifié dans le projet",
   conflict: "Conflit",
   untracked: "Non suivi",

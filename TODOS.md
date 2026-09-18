@@ -23,6 +23,7 @@ Vérifications effectuées : `cargo test` (13 tests réussis, dont 3 tests Git s
 
 ### Retours UI/UX à traiter lors de la passe finale
 
+- Retour utilisateur (test de l’étape 4) : confusion entre la publication Git et la mise à jour de la copie du projet ; après « Publier… », l’élément restait « Bibliothèque plus récente » et le contrôle d’installation ne proposait que « Installer la version locale », « Mettre à jour puis installer » restant grisé. Traité : libellés distinguant les deux synchronisations, une seule action « Installer dans le projet » quand la bibliothèque est à jour, mise à jour de la bibliothèque proposée seulement quand elle est en retard. À revoir lors de la passe finale : éviter le dialogue quand il n’y a rien à décider, et proposer la mise à jour des projets juste après une modification.
 - Relevé pendant l’étape 4 : les messages de lint et les avertissements de scan sont encore rédigés en anglais dans le `core` et affichés tels quels dans l’application. Les traduire côté application à partir de `rule`, selon la convention des codes d’erreur.
 
 ### Test utilisateur de l’étape 4

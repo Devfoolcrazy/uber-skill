@@ -14,6 +14,11 @@
   let acceptHosts = $state(false);
   const canUpdate = $derived(!!status?.verified && !status.blocked && status.behind > 0 && status.ahead === 0 && !store.editorDirty);
   const canInstall = $derived(!!plan && (plan.warnings.length === 0 || acceptHosts));
+  /// Updating the library is only a choice when the remote is ahead of it.
+  const offerUpdate = $derived(!request || (!!status?.verified && status.behind > 0));
+  const installLabel = $derived(
+    !status?.verified ? "Installer sans vérification" : status.behind > 0 ? "Installer la version actuelle de la bibliothèque" : "Installer dans le projet",
+  );
 
   onMount(() => { dialog.showModal(); refresh(); });
 
@@ -79,15 +84,18 @@
 </script>
 
 <dialog bind:this={dialog} oncancel={(e) => { e.preventDefault(); if (!busy) onclose(); }} aria-labelledby="sync-title">
-  <h2 id="sync-title">{request ? "Vérifier avant installation" : "Récupérer les changements Git"}</h2>
-  {#if request}<p class="selectable">{request.ids.join(", ")} → {request.project}</p>{/if}
+  <h2 id="sync-title">{request ? "Installer dans le projet" : "Récupérer les changements Git"}</h2>
+  {#if request}
+    <p class="selectable">{request.ids.join(", ")} : bibliothèque → {request.project}</p>
+    <p class="muted">La copie de la bibliothèque remplace celle du projet. Le dépôt distant est d’abord consulté, pour ne pas installer une version dépassée.</p>
+  {/if}
   {#if status}
     <p>{status.branch ?? "HEAD détachée"} → {status.remote ?? "aucun dépôt distant"} / {status.remote_ref?.replace("refs/heads/", "") ?? "aucune branche de suivi"}</p>
     {#if status.verified}
       <p>{status.behind} commit(s) distant(s) à récupérer · {status.ahead} commit(s) local(aux) à publier.</p>
       {#if status.behind === 0 && !status.blocked}<p class="success">La bibliothèque contient les derniers changements distants.</p>{/if}
     {:else}
-      <p class="warning">La fraîcheur distante n’a pas pu être vérifiée. {request ? "Vous pouvez choisir explicitement d’installer la version locale." : "Vérifiez le réseau et la configuration Git, puis réessayez."}</p>
+      <p class="warning">La fraîcheur distante n’a pas pu être vérifiée. {request ? "Vous pouvez installer la version présente dans la bibliothèque, sans garantie qu’elle soit la plus récente." : "Vérifiez le réseau et la configuration Git, puis réessayez."}</p>
     {/if}
     {#if status.fetch_error}<p class="error selectable">{errorText(status.fetch_error)}</p>{/if}
     {#if status.blocked}<p class="warning" role="alert">{BLOCK_LABEL[status.blocked]}</p>{/if}
@@ -116,8 +124,10 @@
   <div class="footer">
     <button disabled={busy} onclick={refresh}>Vérifier à nouveau</button>
     <button disabled={busy} onclick={onclose}>Annuler</button>
-    {#if request}<button disabled={busy || !canInstall} onclick={installLocal}>Installer la version locale</button>{/if}
-    <button class="primary" disabled={busy || !canUpdate || (!!request && !canInstall)} onclick={update}>{request ? "Mettre à jour puis installer" : "Mettre à jour la bibliothèque"}</button>
+    {#if request}<button class:primary={!offerUpdate} disabled={busy || !canInstall} onclick={installLocal}>{installLabel}</button>{/if}
+    {#if offerUpdate}
+      <button class="primary" disabled={busy || !canUpdate || (!!request && !canInstall)} onclick={update}>{request ? "Mettre à jour la bibliothèque puis installer" : "Mettre à jour la bibliothèque"}</button>
+    {/if}
   </div>
 </dialog>
 

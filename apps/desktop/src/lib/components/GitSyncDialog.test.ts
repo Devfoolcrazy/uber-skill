@@ -36,12 +36,28 @@ describe("install verification", () => {
     render(GitSyncDialog, { request, onclose });
 
     await screen.findByText(/2 commit\(s\) distant\(s\)/);
-    await fireEvent.click(button("Mettre à jour puis installer"));
+    await fireEvent.click(button("Mettre à jour la bibliothèque puis installer"));
 
     await waitFor(() => expect(onclose).toHaveBeenCalled());
     expect(calls("update_library_git")).toEqual([{ snapshot: "behind" }]);
     expect(calls("install_skills")).toEqual([{ plan: fresh, project: "/project" }]);
     expect(store.checked.size).toBe(0);
+  });
+
+  it("offers a single install action when the library is already up to date", async () => {
+    const fresh = plan(syncStatus());
+    const { calls } = bridge({ ...refreshes, prepare_install: () => fresh, install_skills: () => [] });
+    const onclose = vi.fn();
+    render(GitSyncDialog, { request, onclose });
+
+    await screen.findByText(/derniers changements distants/);
+    expect(screen.queryByRole("button", { name: /Mettre à jour/, hidden: true })).toBeNull();
+    const install = button("Installer dans le projet");
+    expect(install.classList.contains("primary")).toBe(true);
+    await fireEvent.click(install);
+
+    await waitFor(() => expect(onclose).toHaveBeenCalled());
+    expect(calls("install_skills")).toEqual([{ plan: fresh, project: "/project" }]);
   });
 
   it("never falls back to a local install when the update fails", async () => {
@@ -55,7 +71,7 @@ describe("install verification", () => {
     render(GitSyncDialog, { request, onclose });
 
     await screen.findByText(/1 commit\(s\) distant\(s\)/);
-    await fireEvent.click(button("Mettre à jour puis installer"));
+    await fireEvent.click(button("Mettre à jour la bibliothèque puis installer"));
 
     const alert = (await screen.findByRole("alert", { hidden: true })).textContent;
     expect(alert).toContain("Mise à jour interrompue.");
@@ -74,8 +90,8 @@ describe("install verification", () => {
 
     await screen.findByText(/Could not resolve host/);
     expect(screen.getByText(/Fraîcheur non vérifiée/)).toBeTruthy();
-    expect(button("Mettre à jour puis installer").disabled).toBe(true);
-    await fireEvent.click(button("Installer la version locale"));
+    expect(screen.queryByRole("button", { name: /Mettre à jour/, hidden: true })).toBeNull();
+    await fireEvent.click(button("Installer sans vérification"));
 
     await waitFor(() => expect(onclose).toHaveBeenCalled());
     expect(calls("install_skills")).toEqual([{ plan: offline, project: "/project" }]);
@@ -89,11 +105,11 @@ describe("install verification", () => {
     render(GitSyncDialog, { request, onclose: vi.fn() });
 
     await screen.findByText("one est déclaré pour claude-code, mais la cible est Cursor.");
-    expect(button("Installer la version locale").disabled).toBe(true);
-    expect(button("Mettre à jour puis installer").disabled).toBe(true);
+    expect(button("Installer la version actuelle de la bibliothèque").disabled).toBe(true);
+    expect(button("Mettre à jour la bibliothèque puis installer").disabled).toBe(true);
     await fireEvent.click(screen.getByRole("checkbox", { hidden: true }));
-    expect(button("Installer la version locale").disabled).toBe(false);
-    expect(button("Mettre à jour puis installer").disabled).toBe(false);
+    expect(button("Installer la version actuelle de la bibliothèque").disabled).toBe(false);
+    expect(button("Mettre à jour la bibliothèque puis installer").disabled).toBe(false);
   });
 
   it("blocks the update while the editor holds unsaved changes", async () => {
@@ -102,8 +118,8 @@ describe("install verification", () => {
     render(GitSyncDialog, { request, onclose: vi.fn() });
 
     await screen.findByText(/1 commit\(s\) distant\(s\)/);
-    expect(button("Mettre à jour puis installer").disabled).toBe(true);
-    expect(button("Installer la version locale").disabled).toBe(false);
+    expect(button("Mettre à jour la bibliothèque puis installer").disabled).toBe(true);
+    expect(button("Installer la version actuelle de la bibliothèque").disabled).toBe(false);
   });
 });
 
@@ -114,6 +130,6 @@ describe("fetch without install", () => {
 
     await screen.findByText(/Les historiques local et distant divergent/);
     expect(button("Mettre à jour la bibliothèque").disabled).toBe(true);
-    expect(screen.queryByRole("button", { name: "Installer la version locale", hidden: true })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Installer/, hidden: true })).toBeNull();
   });
 });

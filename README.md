@@ -86,6 +86,11 @@ Barre du haut : bascule Skills / Agents, sélecteur de projet et de cible, bouto
 Colonnes : filtres (catégories, tags, harnais) · liste avec recherche et cases à cocher · détail (aperçu markdown, éditeur ⌘S, fichiers, lint, tags & catégorie).
 Barre flottante quand des éléments sont cochés : installation dans le projet courant. Tiroir « Installés » : état de dérive, diff, pull/push, retirer.
 
+### Deux synchronisations distinctes
+
+- **Bibliothèque ↔ dépôt distant** : **Publier…** envoie vos modifications, **Récupérer…** reçoit celles des autres. Cela ne touche jamais aux projets.
+- **Bibliothèque → projet** : l’installation copie un skill ou un agent dans un projet. Le tiroir « Installés » compare ensuite cette copie à la bibliothèque. Modifier un skill dans la bibliothèque met donc la copie du projet « en retard », qu’il soit publié ou non ; **Mettre à jour la copie du projet** la rafraîchit.
+
 ### Ouvrir une bibliothèque Git
 
 Dans la barre latérale, **Ouvrir / Cloner…** propose deux parcours :
@@ -136,9 +141,9 @@ Les modifications non enregistrées dans l’éditeur empêchent la mise à jour
 Chaque installation depuis l’application (unitaire, groupée, skill ou agent, réinstallation ou mise
 à jour depuis le tiroir « Installés ») ouvre le même contrôle :
 
-- **Installer la version locale** copie les fichiers présents dans la bibliothèque, y compris un brouillon.
-- **Mettre à jour puis installer** récupère la version distante, recharge les éléments choisis et les installe.
-- Si le réseau ou les accès Git empêchent la vérification, l’installation locale reste un choix explicite.
+- Bibliothèque à jour avec le dépôt distant : une seule action, **Installer dans le projet**. Elle copie les fichiers présents dans la bibliothèque, y compris un brouillon non publié.
+- Bibliothèque en retard : **Mettre à jour la bibliothèque puis installer** récupère la version distante, recharge les éléments choisis et les installe ; **Installer la version actuelle de la bibliothèque** reste possible.
+- Si le réseau ou les accès Git empêchent la vérification, **Installer sans vérification** reste un choix explicite.
 - Si la mise à jour échoue, aucune installation ne suit automatiquement.
 
 Les changements de source depuis le contrôle imposent une nouvelle vérification avant copie.
