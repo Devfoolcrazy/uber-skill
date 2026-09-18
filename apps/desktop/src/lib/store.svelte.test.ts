@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "./api";
 import { store } from "./store.svelte";
 import { bridge, libraryView, skill } from "../test/bridge";
@@ -117,5 +117,73 @@ describe("openLibrary", () => {
     expect(store.selectedTags).toEqual([]);
     expect(store.query).toBe("");
     expect(store.libraryGeneration).toBe(generation + 1);
+  });
+});
+
+describe("removing", () => {
+  const dialog = async () => vi.mocked((await import("@tauri-apps/plugin-dialog")).confirm);
+  const installed = (state: string) => [{ id: "one", state }] as never;
+
+  beforeEach(() => {
+    store.projectPath = "/work/game";
+    store.libraries.skill = libraryView([skill("one")]);
+    store.selectedId = "one";
+    store.projectStatus = { skill: installed("up-to-date"), agent: [] };
+  });
+
+  it("« retirer du projet » only touches the project copy", async () => {
+    (await dialog()).mockResolvedValue(true);
+    const { calls } = bridge({ uninstall_skill: () => null, project_status: () => [] });
+
+    expect(await store.uninstall("one")).toBe(true);
+
+    expect(calls("uninstall_skill")).toEqual([{ kind: "skill", id: "one", project: "/work/game", target: { kind: "claude-code" } }]);
+    expect(calls("delete_skill")).toEqual([]);
+    const [message, options] = (await dialog()).mock.calls[0] as [string, { title: string }];
+    expect(options.title).toBe("Retirer one du projet ?");
+    expect(message).toContain("reste dans la bibliothèque");
+    expect(message).not.toContain("seront perdues");
+  });
+
+  it("warns before discarding edits made in the project, and does nothing when cancelled", async () => {
+    (await dialog()).mockResolvedValue(false);
+    store.projectStatus = { skill: installed("project-modified"), agent: [] };
+    const { calls } = bridge({});
+
+    expect(await store.uninstall("one")).toBe(false);
+
+    expect(((await dialog()).mock.calls[0] as [string])[0]).toContain("elles seront perdues");
+    expect(calls("uninstall_skill")).toEqual([]);
+  });
+
+  it("« supprimer de la bibliothèque » says what it destroys and points to the project-only action", async () => {
+    (await dialog()).mockResolvedValue(false);
+    const { calls } = bridge({});
+
+    expect(await store.deleteFromLibrary("one")).toBe(false);
+
+    const [message, options] = (await dialog()).mock.calls[0] as [string, { title: string; okLabel: string }];
+    expect(options.title).toBe("Supprimer one de la bibliothèque ?");
+    expect(options.okLabel).toBe("Supprimer de la bibliothèque");
+    expect(message).toContain("Corbeille");
+    expect(message).toContain("« Retirer du projet »");
+    expect(calls("delete_skill")).toEqual([]);
+    expect(store.selectedId).toBe("one");
+  });
+
+  it("deletes from the library once confirmed and leaves the project copy alone", async () => {
+    (await dialog()).mockResolvedValue(true);
+    const { calls } = bridge({
+      delete_skill: () => null,
+      scan_library: () => libraryView([]),
+      project_status: () => [],
+      get_registry: () => null,
+    });
+
+    expect(await store.deleteFromLibrary("one")).toBe(true);
+
+    expect(calls("delete_skill")).toEqual([{ kind: "skill", id: "one" }]);
+    expect(calls("uninstall_skill")).toEqual([]);
+    expect(store.selectedId).toBeNull();
   });
 });

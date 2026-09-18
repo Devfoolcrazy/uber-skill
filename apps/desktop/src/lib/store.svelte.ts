@@ -13,6 +13,7 @@ import {
   type Skill,
   type Target,
 } from "./api";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { errorText } from "./errors";
 
 export const DRIFT_LABEL: Record<string, string> = {
@@ -314,6 +315,46 @@ class AppStore {
       if (path) this.config = await api.rememberProject(path, this.target);
       await this.refreshProject();
     });
+  }
+
+  /// Remove the copy installed in the current project. The library is not touched.
+  async uninstall(id: string): Promise<boolean> {
+    const project = this.projectPath;
+    if (!project) return false;
+    const edited = ["project-modified", "conflict"].includes(this.statusOf(id)?.state ?? "");
+    const ok = await confirm(
+      `La copie installée dans ${this.projectName} sera supprimée. ${id} reste dans la bibliothèque.` +
+        (edited ? "\n\nCette copie contient des modifications faites dans le projet : elles seront perdues." : ""),
+      { title: `Retirer ${id} du projet ?`, kind: edited ? "warning" : "info", okLabel: "Retirer du projet", cancelLabel: "Annuler" },
+    );
+    if (!ok) return false;
+    const done = await this.run(`${id} retiré de ${this.projectName}`, async () => {
+      await api.uninstallSkill(this.kind, id, project, this.target);
+      await this.refreshProject();
+      return true;
+    });
+    return done === true;
+  }
+
+  /// Delete an item from the library itself, for every project. It goes to the Trash.
+  async deleteFromLibrary(id: string): Promise<boolean> {
+    const installedHere = !!this.statusOf(id);
+    const ok = await confirm(
+      `${id} sera déplacé dans la Corbeille et retiré de la bibliothèque, donc de tous les projets qui l’installeraient ensuite. La suppression sera partagée à la prochaine publication.` +
+        (installedHere ? `\n\nLa copie installée dans ${this.projectName} n’est pas retirée. Pour enlever seulement cette copie, annulez et utilisez « Retirer du projet ».` : ""),
+      { title: `Supprimer ${id} de la bibliothèque ?`, kind: "warning", okLabel: "Supprimer de la bibliothèque", cancelLabel: "Annuler" },
+    );
+    if (!ok) return false;
+    const kind = this.kind;
+    const done = await this.run(`${id} supprimé de la bibliothèque (déplacé dans la Corbeille)`, async () => {
+      await api.deleteSkill(kind, id);
+      if (this.selectedId === id) this.selectedId = null;
+      await this.refreshLibrary(kind);
+      await this.refreshRegistry();
+      await this.refreshProject();
+      return true;
+    });
+    return done === true;
   }
 
   replaceSkill(skill: Skill) {

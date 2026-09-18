@@ -382,13 +382,12 @@ impl Library {
         read_item(&path, Some(&self.root), self.kind)
     }
 
+    /// Remove an item from the library by moving it to the system Trash: the
+    /// library is the source of truth, and a draft that was never committed has
+    /// no other copy. Installed copies in projects are not touched.
     pub fn delete(&self, id: &str) -> Result<()> {
         let path = self.item_path(id)?;
-        if path.is_dir() {
-            std::fs::remove_dir_all(&path).map_err(|e| Error::io(&path, e))
-        } else {
-            std::fs::remove_file(&path).map_err(|e| Error::io(&path, e))
-        }
+        move_to_trash(&path)
     }
 
     /// Import an external item (skill directory or agent file) into the library (copy).
@@ -412,6 +411,31 @@ impl Library {
         let tags: BTreeSet<&String> = skills.iter().flat_map(|s| s.tags.iter()).collect();
         let cats: BTreeSet<&String> = skills.iter().filter_map(|s| s.category.as_ref()).collect();
         (tags.into_iter().cloned().collect(), cats.into_iter().cloned().collect())
+    }
+}
+
+#[cfg(not(test))]
+fn move_to_trash(path: &Path) -> Result<()> {
+    #[allow(unused_mut)]
+    let mut trash = trash::TrashContext::default();
+    // Finder scripting would ask for an automation permission; the file manager does not.
+    #[cfg(target_os = "macos")]
+    {
+        use trash::macos::{DeleteMethod, TrashContextExtMacos};
+        trash.set_delete_method(DeleteMethod::NsFileManager);
+    }
+    trash
+        .delete(path)
+        .map_err(|e| Error::io(path, std::io::Error::other(e.to_string())))
+}
+
+/// Tests must not fill the Trash of whoever runs them.
+#[cfg(test)]
+fn move_to_trash(path: &Path) -> Result<()> {
+    if path.is_dir() {
+        std::fs::remove_dir_all(path).map_err(|e| Error::io(path, e))
+    } else {
+        std::fs::remove_file(path).map_err(|e| Error::io(path, e))
     }
 }
 

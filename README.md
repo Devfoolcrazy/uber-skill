@@ -92,6 +92,11 @@ Barre flottante quand des éléments sont cochés : installation dans le projet 
 - **Bibliothèque ↔ dépôt distant** : **Publier…** envoie vos modifications, **Récupérer…** reçoit celles des autres. Cela ne touche jamais aux projets.
 - **Bibliothèque → projet** : l’installation copie un skill ou un agent dans un projet. Le tiroir « Installés » compare ensuite cette copie à la bibliothèque. Modifier un skill dans la bibliothèque met donc la copie du projet « en retard », qu’il soit publié ou non ; **Mettre à jour la copie du projet** la rafraîchit.
 
+Deux retraits à ne pas confondre : **Retirer du projet…** supprime seulement la copie installée dans le projet
+courant (avec un avertissement si elle contient des modifications locales) ; **Supprimer de la bibliothèque…**
+retire l’élément de la bibliothèque elle-même. Cette suppression déplace l’élément dans la Corbeille, d’où
+il peut être récupéré, et ne touche pas aux copies déjà installées.
+
 Dans la liste et dans le détail, un indicateur signale ce qui sépare chaque skill ou agent du dépôt distant,
 indépendamment du projet sélectionné : **●** modifications locales non publiées, **↑** commit local pas encore
 envoyé, **↓** version plus récente sur le dépôt distant. Le bouton **Publier…** affiche le nombre d’éléments

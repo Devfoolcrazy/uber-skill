@@ -27,6 +27,7 @@ regex = "1"
 clap = { version = "4", features = ["derive", "env"] }
 anyhow = "1"
 tempfile = "3"
+trash = "5"
 
 # Tauri release profile (see https://tauri.app/concept/size/)
 [profile.release]

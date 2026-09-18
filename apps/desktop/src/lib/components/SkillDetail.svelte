@@ -34,7 +34,6 @@
   $effect(() => { store.editorDirty = dirty || metaDirty; });
 
   let issues = $state<Issue[] | null>(null);
-  let confirmDelete = $state(false);
   let refineOpen = $state(false);
   const installed = $derived(skill ? store.statusOf(skill.id) : undefined);
 
@@ -63,7 +62,6 @@
     if (!s) return;
     if (loadedFor !== s.id) {
       issues = null;
-      confirmDelete = false;
       metaOpen = false;
       load(s, mainFile(s));
       if (store.editRequest === s.id) {
@@ -175,17 +173,6 @@
     }
   }
 
-  async function remove() {
-    if (!skill) return;
-    const id = skill.id;
-    const ok = await store.run(`Skill ${id} supprimé`, () => api.deleteSkill(store.kind, id));
-    if (ok !== undefined) {
-      store.selectedId = null;
-      await store.refreshLibrary();
-      await store.refreshRegistry();
-    }
-  }
-
   function onkeydown(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key === "s") {
       e.preventDefault();
@@ -218,6 +205,7 @@
             <button class="small" onclick={() => (store.drawerOpen = true)} title="Voir dans les installés">
               <span class="dot {installed.state}"></span> {DRIFT_LABEL[installed.state]}
             </button>
+            <button class="small" title="Supprime la copie installée dans ce projet ; l’élément reste dans la bibliothèque" onclick={() => store.uninstall(skill!.id)}>Retirer du projet…</button>
           {/if}
         {/if}
         <button class="small" onclick={() => api.openInEditor(skill!.path).catch(store.fail)}>Ouvrir dans l'éditeur</button>
@@ -225,12 +213,7 @@
         {#if skill.kind === "skill"}
           <button class="small" disabled={dirty || metaDirty} title={dirty || metaDirty ? "Enregistrez vos modifications avant de raffiner" : "Proposer une amélioration de SKILL.md avec Claude"} onclick={() => (refineOpen = true)}>Raffiner…</button>
         {/if}
-        {#if !confirmDelete}
-          <button class="small danger" onclick={() => (confirmDelete = true)}>Supprimer</button>
-        {:else}
-          <button class="small danger" onclick={remove}>Confirmer la suppression</button>
-          <button class="small" onclick={() => (confirmDelete = false)}>Annuler</button>
-        {/if}
+        <button class="small danger" title="Supprime l’élément de la bibliothèque elle-même, pas seulement d’un projet" onclick={() => store.deleteFromLibrary(skill!.id)}>Supprimer de la bibliothèque…</button>
       </div>
       <p class="desc selectable">{skill.description}</p>
       <div class="wrap">

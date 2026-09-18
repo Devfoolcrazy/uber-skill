@@ -93,7 +93,7 @@
               <button class="small" onclick={() => showDiff(s.id)}>Diff</button>
             {/if}
             <button class="small" onclick={() => api.openInEditor(s.path).catch(store.fail)} title="Ouvrir la copie installée">Ouvrir</button>
-            <button class="small danger" onclick={() => act(`${s.id} retiré`, () => api.uninstallSkill(store.kind, s.id, store.projectPath!, store.target))}>Retirer</button>
+            <button class="small danger" title="Supprime la copie installée dans ce projet ; l’élément reste dans la bibliothèque" onclick={() => store.uninstall(s.id)}>Retirer du projet…</button>
           </div>
         </div>
       {/each}
