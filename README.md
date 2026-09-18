@@ -146,9 +146,11 @@ local ; sa publication Git est une action séparée.
 ## Tests
 
 ```sh
-cargo test
-cd apps/desktop && pnpm check
+cargo test                                    # core, sur de vrais dépôts Git temporaires
+cd apps/desktop && pnpm check && pnpm test    # types, puis store et dialogues Git (vitest, passerelle Tauri simulée)
 ```
+
+`cargo fmt --all` avant de commiter (largeur 120, voir `rustfmt.toml`).
 
 Note macOS : la licence Xcode n'étant pas acceptée sur cette machine, `.cargo/config.toml` force
 `DEVELOPER_DIR` sur les Command Line Tools.
