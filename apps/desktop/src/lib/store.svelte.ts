@@ -160,7 +160,8 @@ class AppStore {
   notify(msg: string) {
     this.toast = msg;
     if (this.toastTimer) clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => (this.toast = null), 2600);
+    // Long messages stay long enough to be read.
+    this.toastTimer = setTimeout(() => (this.toast = null), Math.max(2600, msg.length * 60));
   }
 
   fail(e: unknown) {

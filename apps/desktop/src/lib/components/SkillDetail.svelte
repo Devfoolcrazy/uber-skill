@@ -84,7 +84,15 @@
       original = text;
       store.replaceSkill(s);
       issues = null;
-      await store.refreshProject().catch(store.fail);
+      await projectCopyChanged(s.id);
+    }
+  }
+
+  /// A saved change leaves the copy installed in the current project behind: say so right away.
+  async function projectCopyChanged(id: string) {
+    await store.refreshProject().catch(store.fail);
+    if (store.statusOf(id)?.state === "library-updated") {
+      store.notify(`Enregistré. La copie dans ${store.projectName} est en retard : « Mettre à jour la copie du projet ».`);
     }
   }
 
@@ -111,6 +119,7 @@
     if (s) {
       store.replaceSkill(s);
       await store.refreshRegistry();
+      await projectCopyChanged(s.id);
       metaOpen = false;
       if (isMain) await load(s, mainFile(s));
       issues = null;
@@ -153,6 +162,9 @@
           {#if !installed}
             <button class="small primary" disabled={!store.targetOk} title={store.targetOk ? "" : "Cette cible ne gère pas les agents"} onclick={installHere}>Installer dans {store.projectName}</button>
           {:else}
+            {#if installed.state === "library-updated"}
+              <button class="small primary" disabled={!store.targetOk} title="La bibliothèque contient une version plus récente que la copie installée dans ce projet" onclick={installHere}>Mettre à jour la copie du projet</button>
+            {/if}
             <button class="small" onclick={() => (store.drawerOpen = true)} title="Voir dans les installés">
               <span class="dot {installed.state}"></span> {DRIFT_LABEL[installed.state]}
             </button>
