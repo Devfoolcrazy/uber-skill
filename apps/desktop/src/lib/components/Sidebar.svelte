@@ -58,7 +58,9 @@
       {/if}
       <button class="small" disabled={!store.library || store.loading} onclick={() => store.run("Rechargé", () => store.refreshLibrary())}>Recharger</button>
     </div>
-    <button class="small" style="margin-top:6px" disabled={!store.config?.library_path || store.loading} onclick={() => (publishOpen = true)}>Publier…</button>
+    <button class="small" style="margin-top:6px" disabled={!store.config?.library_path || store.loading} onclick={() => (publishOpen = true)}>
+      Publier…{#if store.unpublishedCount > 0} <span class="unknown-count" title="Skills et agents avec des modifications ou des commits à publier">{store.unpublishedCount}</span>{/if}
+    </button>
     <button class="small" style="margin-top:6px" disabled={!store.config?.library_path || store.loading} onclick={() => (store.gitDialog = {})}>Récupérer…</button>
     <button class="small" style="margin-top:6px" disabled={!store.config?.library_path} onclick={() => (store.registryOpen = true)}>
       Tags et catégories…{#if store.unknownCount > 0} <span class="unknown-count" title="Valeurs absentes du référentiel">{store.unknownCount}</span>{/if}
@@ -153,7 +155,7 @@
   <LibraryChooser onclose={() => (libraryChooserOpen = false)} />
 {/if}
 {#if publishOpen}
-  <PublishLibrary onclose={() => (publishOpen = false)} />
+  <PublishLibrary onclose={() => { publishOpen = false; store.refreshGitStates("skill"); store.refreshGitStates("agent"); }} />
 {/if}
 
 <style>

@@ -164,6 +164,20 @@ async fn prepare_install(
         .map_err(err)
 }
 
+/// Items that differ from the tracked remote branch, by id. Local Git data only.
+#[tauri::command]
+async fn library_git_states(
+    state: State<'_, AppState>,
+    kind: ItemKind,
+) -> CmdResult<std::collections::HashMap<String, git::items::ItemGitState>> {
+    let root = state.config.lock().map_err(err)?.library_path().map_err(err)?;
+    let lib = open_library(&state, kind)?;
+    tauri::async_runtime::spawn_blocking(move || git::items::item_states(&root, &lib.scan()?.skills))
+        .await
+        .map_err(err)?
+        .map_err(err)
+}
+
 /// Ask Claude for an improved SKILL.md. Runs off the UI thread: it takes tens of seconds.
 #[tauri::command]
 async fn refine_propose(
@@ -481,6 +495,7 @@ pub fn run() {
             check_library_git,
             update_library_git,
             prepare_install,
+            library_git_states,
             refine_propose,
             refine_accept,
             get_registry,

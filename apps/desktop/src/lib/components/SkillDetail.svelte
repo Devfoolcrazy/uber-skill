@@ -3,6 +3,7 @@
   import { marked } from "marked";
   import { api, splitFrontmatter, type Issue, type Skill } from "$lib/api";
   import { store, DRIFT_LABEL } from "$lib/store.svelte";
+  import GitBadge from "./GitBadge.svelte";
   import MetaFields from "./MetaFields.svelte";
   import RefineDialog from "./RefineDialog.svelte";
 
@@ -170,6 +171,7 @@
       <div class="row">
         <h2 class="selectable">{skill.id}</h2>
         {#if skill.category}<span class="chip cat" class:unknown={!store.isKnown("category", skill.category)} title={store.isKnown("category", skill.category) ? undefined : "Catégorie absente du référentiel"}>{skill.category}</span>{/if}
+        <GitBadge state={store.gitStateOf(skill.id)} full />
         <span class="spacer"></span>
         {#if store.projectPath}
           {#if !installed}

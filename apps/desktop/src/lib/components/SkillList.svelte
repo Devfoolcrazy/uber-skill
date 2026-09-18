@@ -1,5 +1,6 @@
 <script lang="ts">
   import { store, DRIFT_LABEL } from "$lib/store.svelte";
+  import GitBadge from "./GitBadge.svelte";
   import NewSkillForm from "./NewSkillForm.svelte";
 
   let showNew = $state(false);
@@ -36,6 +37,7 @@
           <div class="row">
             <span class="name">{s.id}</span>
             {#if st}<span class="dot {st.state}" title={DRIFT_LABEL[st.state]}></span>{/if}
+            <GitBadge state={store.gitStateOf(s.id)} />
             <span class="spacer"></span>
             {#if s.category}<span class="chip cat">{s.category}</span>{/if}
             {#if s.hosts.length}<span class="chip host" title="Harnais : {s.hosts.join(', ')}">⌘ {s.hosts.join(", ")}</span>{/if}

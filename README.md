@@ -91,6 +91,12 @@ Barre flottante quand des éléments sont cochés : installation dans le projet 
 - **Bibliothèque ↔ dépôt distant** : **Publier…** envoie vos modifications, **Récupérer…** reçoit celles des autres. Cela ne touche jamais aux projets.
 - **Bibliothèque → projet** : l’installation copie un skill ou un agent dans un projet. Le tiroir « Installés » compare ensuite cette copie à la bibliothèque. Modifier un skill dans la bibliothèque met donc la copie du projet « en retard », qu’il soit publié ou non ; **Mettre à jour la copie du projet** la rafraîchit.
 
+Dans la liste et dans le détail, un indicateur signale ce qui sépare chaque skill ou agent du dépôt distant,
+indépendamment du projet sélectionné : **●** modifications locales non publiées, **↑** commit local pas encore
+envoyé, **↓** version plus récente sur le dépôt distant. Le bouton **Publier…** affiche le nombre d’éléments
+à publier. Ces états sont calculés à partir des données Git locales, sans accès réseau : **↓** reflète donc
+la dernière récupération (**Récupérer…** ou le contrôle avant installation).
+
 ### Ouvrir une bibliothèque Git
 
 Dans la barre latérale, **Ouvrir / Cloner…** propose deux parcours :

@@ -30,6 +30,9 @@
     } else {
       status = await api.checkLibraryGit();
     }
+    // The fetch may have revealed newer remote versions.
+    void store.refreshGitStates("skill");
+    void store.refreshGitStates("agent");
   }
 
   async function refresh() {

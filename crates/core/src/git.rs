@@ -7,6 +7,7 @@ use crate::error::{GitAction, InputError};
 use crate::{Config, Error, Result};
 
 pub mod installation;
+pub mod items;
 pub mod publication;
 pub mod sync;
 

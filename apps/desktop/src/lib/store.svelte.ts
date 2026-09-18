@@ -6,6 +6,7 @@ import {
   type Facet,
   type InstalledSkill,
   type InstallRequest,
+  type ItemGitState,
   type ItemKind,
   type LibraryView,
   type RegistryView,
@@ -52,6 +53,25 @@ class AppStore {
   /// Allowed categories and tags of the library, merged with the values in use.
   registry = $state<RegistryView | null>(null);
   registryOpen = $state(false);
+  /// Items that differ from the tracked remote branch. Decoration only: never blocks anything.
+  gitStates = $state<Record<ItemKind, Record<string, ItemGitState>>>({ skill: {}, agent: {} });
+
+  async refreshGitStates(kind: ItemKind = this.kind) {
+    this.gitStates[kind] = this.config?.library_path ? await api.libraryGitStates(kind).catch(() => ({})) : {};
+  }
+
+  gitStateOf(id: string): ItemGitState | undefined {
+    return this.gitStates[this.kind][id];
+  }
+
+  /// Items of both kinds with something to publish.
+  get unpublishedCount(): number {
+    return (["skill", "agent"] as ItemKind[]).reduce(
+      (n, k) => n + Object.values(this.gitStates[k]).filter((s) => s.modified || s.unpublished).length,
+      0,
+    );
+  }
+
   /// Id of a just-created item that the detail view should open straight in the editor.
   editRequest = $state<string | null>(null);
 
@@ -219,6 +239,7 @@ class AppStore {
   async refreshLibrary(kind: ItemKind = this.kind, keepSelection = true) {
     const lib = await api.scanLibrary(kind);
     this.libraries[kind] = lib;
+    void this.refreshGitStates(kind);
     if (kind !== this.kind) return;
     if (!keepSelection || !lib.skills.some((s) => s.id === this.selectedId)) {
       this.selectedId = null;
@@ -305,6 +326,7 @@ class AppStore {
     const cats = new Set(lib.skills.map((s) => s.category).filter((c): c is string => !!c));
     lib.tags = [...tags].sort();
     lib.categories = [...cats].sort();
+    void this.refreshGitStates(skill.kind);
   }
 
   toggleChecked(id: string) {
