@@ -20,8 +20,21 @@ pub enum Error {
     NoLibrary,
     #[error("unsupported: {0}")]
     Unsupported(String),
+    /// Git could not be started, or another Git operation holds the lock.
     #[error("{0}")]
-    Git(String),
+    GitUnavailable(String),
+    /// Git ran and failed; the message carries its stderr.
+    #[error("{0}")]
+    GitCommand(String),
+    /// The repository or library changed since the reviewed preview or check.
+    #[error("{0}")]
+    GitStale(String),
+    /// The repository state must be resolved in an external Git tool first.
+    #[error("{0}")]
+    GitBlocked(String),
+    /// A value supplied by the caller was rejected before anything ran.
+    #[error("{0}")]
+    InvalidInput(String),
     #[error("not a directory: {0}")]
     NotADirectory(PathBuf),
     #[error("json error: {0}")]

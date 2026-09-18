@@ -110,9 +110,9 @@ pub fn inspect(path: &Path) -> Result<SyncStatus> {
             .split_whitespace()
             .map(str::parse)
             .collect::<std::result::Result<_, _>>()
-            .map_err(|_| Error::Git("État de synchronisation Git invalide.".into()))?;
+            .map_err(|_| Error::GitCommand("État de synchronisation Git invalide.".into()))?;
         if counts.len() != 2 {
-            return Err(Error::Git("État de synchronisation Git incomplet.".into()));
+            return Err(Error::GitCommand("État de synchronisation Git incomplet.".into()));
         }
         status.ahead = counts[0];
         status.behind = counts[1];
@@ -164,31 +164,31 @@ fn check_unlocked(path: &Path) -> Result<SyncStatus> {
 pub fn check(path: &Path) -> Result<SyncStatus> {
     let _guard = OPERATION_LOCK
         .lock()
-        .map_err(|_| Error::Git("Git indisponible.".into()))?;
+        .map_err(|_| Error::GitUnavailable("Git indisponible.".into()))?;
     check_unlocked(path)
 }
 
 pub fn update(path: &Path, expected_snapshot: &str) -> Result<SyncStatus> {
     let _guard = OPERATION_LOCK
         .lock()
-        .map_err(|_| Error::Git("Git indisponible.".into()))?;
+        .map_err(|_| Error::GitUnavailable("Git indisponible.".into()))?;
     let state = check_unlocked(path)?;
     if state.snapshot != expected_snapshot {
-        return Err(Error::Git(
+        return Err(Error::GitStale(
             "L’état Git a changé. Vérifiez à nouveau avant de mettre à jour.".into(),
         ));
     }
     if !state.verified {
-        return Err(Error::Git(
+        return Err(Error::GitBlocked(
             "La fraîcheur distante n’a pas pu être vérifiée. Aucune mise à jour appliquée.".into(),
         ));
     }
     if let Some(reason) = &state.blocked {
-        return Err(Error::Git(reason.clone()));
+        return Err(Error::GitBlocked(reason.clone()));
     }
     if state.behind > 0 {
         run(git(path).args(["merge", "--ff-only", "--no-autostash", "--no-overwrite-ignore", "--no-edit", state.remote_head.as_deref().unwrap()]))
-            .map_err(|e| Error::Git(format!("{e}\nMise à jour interrompue. Préservez vos modifications et résolvez la situation dans votre outil Git avant de réessayer.")))?;
+            .map_err(|e| Error::GitCommand(format!("{e}\nMise à jour interrompue. Préservez vos modifications et résolvez la situation dans votre outil Git avant de réessayer.")))?;
     }
     let mut updated = inspect(path)?;
     updated.verified = true;
@@ -294,10 +294,7 @@ pub(super) mod tests {
         push_file(&writer, "a.md", "one\n");
         let reviewed = check(&local).unwrap();
         push_file(&writer, "a.md", "two\n");
-        assert!(update(&local, &reviewed.snapshot)
-            .unwrap_err()
-            .to_string()
-            .contains("a changé"));
+        assert!(matches!(update(&local, &reviewed.snapshot), Err(Error::GitStale(_))));
         assert_eq!(fs::read_to_string(local.join("a.md")).unwrap(), "initial\n");
         run_git(
             &local,

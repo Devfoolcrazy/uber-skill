@@ -125,7 +125,7 @@ pub fn preview(path: &Path) -> Result<Preview> {
             .unwrap_or_else(|| h.clone());
         pending_count = run(git(&root).args(["rev-list", "--count", &range]))?
             .parse()
-            .map_err(|_| Error::Git("Nombre de commits Git invalide.".into()))?;
+            .map_err(|_| Error::GitCommand("Nombre de commits Git invalide.".into()))?;
         pending_commits = run(git(&root).args(["log", "--format=%h %s", "-20", &range, "--"]))?
             .lines()
             .map(str::to_owned)
@@ -154,7 +154,7 @@ pub fn preview(path: &Path) -> Result<Preview> {
     let names = run(temp_git().args(["diff", "--cached", "--name-status", "--no-renames", "-z"]))?;
     let parts: Vec<_> = names.split('\0').filter(|s| !s.is_empty()).collect();
     if parts.len() % 2 != 0 {
-        return Err(Error::Git("Liste de fichiers Git invalide.".into()));
+        return Err(Error::GitCommand("Liste de fichiers Git invalide.".into()));
     }
     let mut files = Vec::new();
     for pair in parts.chunks_exact(2) {
@@ -205,27 +205,29 @@ pub fn preview(path: &Path) -> Result<Preview> {
 pub fn publish(path: &Path, snapshot: &str, paths: &[String], message: &str) -> Result<PublicationResult> {
     let _guard = super::OPERATION_LOCK
         .lock()
-        .map_err(|_| Error::Git("Publication Git indisponible.".into()))?;
+        .map_err(|_| Error::GitUnavailable("Publication Git indisponible.".into()))?;
     let current = preview(path)?;
     if current.snapshot != snapshot {
-        return Err(Error::Git(
+        return Err(Error::GitStale(
             "La bibliothèque a changé depuis l’aperçu. Actualisez les différences avant de publier.".into(),
         ));
     }
     if let Some(reason) = &current.blocked {
-        return Err(Error::Git(reason.clone()));
+        return Err(Error::GitBlocked(reason.clone()));
     }
     let selected: BTreeSet<_> = paths.iter().collect();
     if selected.len() != paths.len() || selected.iter().any(|p| !current.files.iter().any(|f| &f.path == *p)) {
-        return Err(Error::Git(
+        return Err(Error::InvalidInput(
             "La sélection contient un fichier absent de l’aperçu.".into(),
         ));
     }
     if !paths.is_empty() && message.trim().is_empty() {
-        return Err(Error::Git("Le message de commit ne peut pas être vide.".into()));
+        return Err(Error::InvalidInput(
+            "Le message de commit ne peut pas être vide.".into(),
+        ));
     }
     if paths.is_empty() && current.pending_count == 0 {
-        return Err(Error::Git(
+        return Err(Error::InvalidInput(
             "Sélectionnez des fichiers à publier. Aucun commit local n’est en attente.".into(),
         ));
     }
@@ -236,13 +238,13 @@ pub fn publish(path: &Path, snapshot: &str, paths: &[String], message: &str) -> 
         // --only explicitly excludes other staged files. Hooks and signing stay
         // enabled according to the user's Git configuration.
         run(git(root).args(["commit", "--only", "--cleanup=verbatim", "-m", message, "--"]).args(paths))
-            .map_err(|e| Error::Git(format!("{e}\nLe commit a échoué ; les fichiers sélectionnés restent préparés dans Git. Aucun push n’a été effectué.")))?;
+            .map_err(|e| Error::GitCommand(format!("{e}\nLe commit a échoué ; les fichiers sélectionnés restent préparés dans Git. Aucun push n’a été effectué.")))?;
         commit = Some(run(git(root).args(["rev-parse", "HEAD"]))?);
     }
     let head = commit
         .as_ref()
         .or(current.head.as_ref())
-        .ok_or_else(|| Error::Git("Aucun commit à envoyer.".into()))?;
+        .ok_or_else(|| Error::InvalidInput("Aucun commit à envoyer.".into()))?;
     let remote = current.remote.as_deref().unwrap();
     let remote_branch = current.remote_branch.as_deref().unwrap();
     // Pin the source OID: an external commit made while pushing is not included.
@@ -337,10 +339,10 @@ pub(super) mod tests {
         let p = preview(&local).unwrap();
         let head = p.head.clone();
         fs::write(local.join("a.md"), "version two\n").unwrap();
-        assert!(publish(&local, &p.snapshot, &["a.md".into()], "stale")
-            .unwrap_err()
-            .to_string()
-            .contains("a changé"));
+        assert!(matches!(
+            publish(&local, &p.snapshot, &["a.md".into()], "stale"),
+            Err(Error::GitStale(_))
+        ));
         let p = preview(&local).unwrap();
         for paths in [
             vec!["../escape".into()],

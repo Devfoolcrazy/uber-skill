@@ -27,9 +27,9 @@ fn command() -> Command {
 fn run(cmd: &mut Command) -> Result<String> {
     let output = cmd
         .output()
-        .map_err(|e| Error::Git(format!("Impossible de lancer Git. Vérifiez son installation : {e}")))?;
+        .map_err(|e| Error::GitUnavailable(format!("Impossible de lancer Git. Vérifiez son installation : {e}")))?;
     if !output.status.success() {
-        return Err(Error::Git(format!(
+        return Err(Error::GitCommand(format!(
             "Échec de Git : {}",
             String::from_utf8_lossy(&output.stderr).trim()
         )));
@@ -50,7 +50,7 @@ pub fn repository_root(path: &Path) -> Result<PathBuf> {
     let root = PathBuf::from(root);
     let root = root.canonicalize().map_err(|e| Error::io(&root, e))?;
     if root != path {
-        return Err(Error::Git(format!(
+        return Err(Error::InvalidInput(format!(
             "Choisissez la racine du dépôt Git : {}",
             root.display()
         )));
@@ -71,7 +71,7 @@ pub fn library_config(current: &Config, path: &Path) -> Result<Config> {
 pub fn clone_repository(url: &str, parent: &Path, name: &str) -> Result<PathBuf> {
     let url = url.trim();
     if url.is_empty() || url.starts_with('-') || url.chars().any(char::is_control) {
-        return Err(Error::Git("Indiquez une URL de dépôt Git valide.".into()));
+        return Err(Error::InvalidInput("Indiquez une URL de dépôt Git valide.".into()));
     }
     if name.is_empty()
         || name == "."
@@ -81,7 +81,7 @@ pub fn clone_repository(url: &str, parent: &Path, name: &str) -> Result<PathBuf>
         || name.contains(['/', '\\', ':'])
         || name.chars().any(char::is_control)
     {
-        return Err(Error::Git(
+        return Err(Error::InvalidInput(
             "Indiquez un nom de dossier simple, sans séparateur de chemin.".into(),
         ));
     }
@@ -93,7 +93,7 @@ pub fn clone_repository(url: &str, parent: &Path, name: &str) -> Result<PathBuf>
     // Reserve the destination atomically, rejecting even existing empty folders
     // and dangling symlinks. On failure, never recursively delete user files.
     std::fs::create_dir(&destination).map_err(|e| {
-        Error::Git(format!(
+        Error::InvalidInput(format!(
             "Impossible de créer {} : {e}. Choisissez un nouveau dossier.",
             destination.display()
         ))
@@ -119,7 +119,7 @@ pub fn clone_repository(url: &str, parent: &Path, name: &str) -> Result<PathBuf>
         .arg(&destination));
     if let Err(e) = result {
         let retained = std::fs::remove_dir(&destination).is_err();
-        return Err(Error::Git(format!(
+        return Err(Error::GitCommand(format!(
             "{e}\nLe clonage n’a pas abouti. Vérifiez l’URL, le réseau et vos accès Git.{}",
             if retained {
                 format!(" Le dossier partiel a été conservé : {}", destination.display())

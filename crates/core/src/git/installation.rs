@@ -70,7 +70,7 @@ fn source_state(skill: &Skill, status: Option<&sync::SyncStatus>) -> Result<Sour
 
 pub fn prepare(cfg: &Config, kind: ItemKind, ids: &[String], target: &Target) -> Result<InstallationPlan> {
     if ids.is_empty() {
-        return Err(Error::Git("Aucun élément sélectionné.".into()));
+        return Err(Error::InvalidInput("Aucun élément sélectionné.".into()));
     }
     if !target.supports(kind) {
         return Err(Error::Unsupported("Cette cible ne gère pas ce type d’élément.".into()));
@@ -110,15 +110,15 @@ pub fn prepare(cfg: &Config, kind: ItemKind, ids: &[String], target: &Target) ->
 pub fn install_prepared(cfg: &Config, plan: &InstallationPlan, project: &Path) -> Result<Vec<LockEntry>> {
     let _guard = OPERATION_LOCK
         .lock()
-        .map_err(|_| Error::Git("Git indisponible.".into()))?;
+        .map_err(|_| Error::GitUnavailable("Git indisponible.".into()))?;
     if cfg.library_path()?.to_string_lossy() != plan.root {
-        return Err(Error::Git(
+        return Err(Error::GitStale(
             "La bibliothèque a changé. Recommencez la vérification.".into(),
         ));
     }
     if let Some(expected) = &plan.git {
         if sync::inspect(Path::new(&plan.root))?.snapshot != expected.snapshot {
-            return Err(Error::Git(
+            return Err(Error::GitStale(
                 "L’état Git a changé depuis la vérification. Actualisez avant d’installer.".into(),
             ));
         }
@@ -129,7 +129,7 @@ pub fn install_prepared(cfg: &Config, plan: &InstallationPlan, project: &Path) -
     for expected in &plan.items {
         let skill = lib.get(&expected.id)?;
         if skill.hash != expected.hash || skill.path != expected.source {
-            return Err(Error::Git(format!(
+            return Err(Error::GitStale(format!(
                 "{} a changé depuis la vérification. Actualisez avant d’installer.",
                 skill.id
             )));
