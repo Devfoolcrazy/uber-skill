@@ -82,6 +82,20 @@ pnpm install
 pnpm tauri dev
 ```
 
+Build de production (macOS) :
+
+```sh
+cd apps/desktop
+pnpm tauri build      # target/release/bundle/macos/Uber Skill.app et bundle/dmg/*.dmg
+```
+
+L’application n’est pas signée avec un certificat Apple : au premier lancement d’une copie téléchargée,
+macOS demande de confirmer l’ouverture (clic droit › Ouvrir). Lancée depuis le Finder, elle complète son
+`PATH` avec `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, `~/.cargo/bin` et `~/.claude/local` pour
+trouver Git, l’éditeur externe et la commande `claude`. L’aperçu Markdown est assaini et une politique de
+sécurité du contenu interdit tout script qui ne vient pas de l’application : un skill importé ne peut pas
+agir sur la bibliothèque. L’icône se régénère avec `pnpm tauri icon app-icon.png`.
+
 Barre du haut : bascule Skills / Agents, sélecteur de projet et de cible, bouton « Installés » avec badge de dérive, réglages.
 Colonnes : filtres (catégories, tags, harnais) · liste avec recherche et cases à cocher · détail (aperçu markdown, éditeur ⌘S, fichiers, lint, tags & catégorie).
 Dans l'aperçu, un lien vers un fichier du skill l'ouvre sur place (rendu Markdown, retour vers `SKILL.md`), un lien web s'ouvre dans le navigateur, un lien cassé est signalé sans quitter l'écran.

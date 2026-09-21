@@ -487,7 +487,32 @@ fn path_exists(path: PathBuf) -> bool {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// An app launched from the Finder or the Dock gets `/usr/bin:/bin:/usr/sbin:/sbin`.
+/// Git, the external editor and the Claude CLI usually live elsewhere.
+fn extend_path() {
+    let current = std::env::var_os("PATH").unwrap_or_default();
+    let mut dirs: Vec<PathBuf> = std::env::split_paths(&current).collect();
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let usual = ["/opt/homebrew/bin", "/usr/local/bin"]
+        .map(PathBuf::from)
+        .into_iter()
+        .chain(
+            home.iter()
+                .flat_map(|h| [h.join(".local/bin"), h.join(".cargo/bin"), h.join(".claude/local")]),
+        );
+    for dir in usual {
+        if dir.is_dir() && !dirs.contains(&dir) {
+            dirs.push(dir);
+        }
+    }
+    if let Ok(path) = std::env::join_paths(dirs) {
+        std::env::set_var("PATH", path);
+    }
+}
+
 pub fn run() {
+    // Before anything spawns a thread: the environment is process-wide.
+    extend_path();
     let config = Config::load().unwrap_or_default();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())

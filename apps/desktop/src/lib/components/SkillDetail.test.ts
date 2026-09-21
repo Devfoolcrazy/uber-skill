@@ -128,3 +128,18 @@ describe("lint tab", () => {
     expect(calls("apply_lint_fix")).toEqual([{ kind: "skill", id: "one", fix: finding.fix }]);
   });
 });
+
+describe("untrusted markdown", () => {
+  it("renders formatting but never scripts, handlers or frames", async () => {
+    const hostile = "---\nname: one\ndescription: One\n---\n# Title\n\n**bold** <img src=x onerror=\"window.__pwned = 1\"> <script>window.__pwned = 1</script>\n\n<iframe src=\"https://example.com\"></iframe>\n\nA [link](javascript:window.__pwned=1) in a paragraph.\n";
+    bridge({ read_skill_file: () => hostile });
+    const { container } = render(SkillDetail);
+
+    expect(await screen.findByRole("heading", { name: "Title" })).toBeTruthy();
+    const html = container.querySelector("article")!.innerHTML;
+    expect(html).toContain("<strong>bold</strong>");
+    expect(html).not.toMatch(/onerror|<script|<iframe|href="javascript:/i);
+    expect(html).toContain("in a paragraph.");
+    expect((window as unknown as { __pwned?: number }).__pwned).toBeUndefined();
+  });
+});

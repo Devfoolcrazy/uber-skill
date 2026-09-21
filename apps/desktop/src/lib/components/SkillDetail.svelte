@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
+  import DOMPurify from "dompurify";
   import { marked } from "marked";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { api, splitFrontmatter, type Issue, type Skill } from "$lib/api";
@@ -82,7 +83,9 @@
   const preview = $derived.by(() => {
     if (!skill || !isMarkdown) return "";
     const body = isMain ? splitFrontmatter(text).body : text;
-    return marked.parse(body, { async: false }) as string;
+    // A skill may come from anywhere, and this window can run the app's commands:
+    // no script, event handler or embedded frame from its markdown reaches the page.
+    return DOMPurify.sanitize(marked.parse(body, { async: false }) as string, { FORBID_TAGS: ["style", "form"] });
   });
 
   /// Path of a relative link inside the skill, from the file being previewed; null when it escapes the skill.

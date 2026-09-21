@@ -191,7 +191,10 @@ Propositions du 21 septembre 2026, retenues par l’utilisateur pour être trait
 ### Préalables, avant d’ajouter des fonctionnalités
 
 - **Passe UI/UX (étape 7)** : réalisée et validée par l’utilisateur.
-- **Build de production** : jamais essayé. Vérifier le lancement depuis le Finder (PATH minimal : `git` et `claude` doivent être trouvés), l’icône, le nom de l’application, la signature. Tous les tests d’interface actuels passent par une passerelle Tauri simulée.
+- **Build de production** : réalisé le 21 septembre 2026, en attente du test utilisateur. `pnpm tauri build` produit `Uber Skill.app` (5,9 Mo) et un `.dmg` (2,9 Mo) pour Apple Silicon, signature ad hoc. Ajouts : icône propre à l’application, PATH complété au démarrage, aperçu Markdown assaini (DOMPurify) et politique de sécurité du contenu, métadonnées du bundle.
+  - Vérifié : le build aboutit, l’application se lance et reste active, le frontend de production s’affiche sans aucune violation de la politique de sécurité dans un navigateur (seule erreur attendue : absence de la passerelle Tauri).
+  - À vérifier par l’utilisateur, faute de pouvoir piloter la fenêtre native : lancer `Uber Skill.app` depuis le Finder (et non depuis un terminal), puis contrôler que la bibliothèque se charge, que « Récupérer… » et « Publier… » trouvent Git, que « Raffiner… » trouve `claude`, que « Ouvrir dans l’éditeur » fonctionne, que l’aperçu Markdown et ses liens s’affichent, et que l’icône apparaît dans le Dock.
+  - Non traité : signature avec un certificat Apple et notarisation (nécessaires pour distribuer l’application à d’autres sans avertissement de macOS), mise à jour automatique, build Intel ou universel.
 
 ### 1. Vue « mes projets »
 
