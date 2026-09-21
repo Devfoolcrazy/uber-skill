@@ -10,6 +10,7 @@
   import SelectionBar from "$lib/components/SelectionBar.svelte";
   import GitSyncDialog from "$lib/components/GitSyncDialog.svelte";
   import LibrarySettings from "$lib/components/LibrarySettings.svelte";
+  import ProjectsView from "$lib/components/ProjectsView.svelte";
 
   onMount(() => {
     store.init();
@@ -19,11 +20,17 @@
 <div class="app">
   <TopBar />
   <div class="main">
-    <Sidebar />
-    <SkillList />
-    {#key `${store.libraryGeneration}:${store.config?.agents_path}:${store.kind}`}
-      <SkillDetail />
-    {/key}
+    {#if store.view === "projects"}
+      <ProjectsView />
+    {/if}
+    <!-- Kept mounted while the projects are shown: the editor may hold unsaved changes. -->
+    <div class="library" class:away={store.view !== "library"}>
+      <Sidebar />
+      <SkillList />
+      {#key `${store.libraryGeneration}:${store.config?.agents_path}:${store.kind}`}
+        <SkillDetail />
+      {/key}
+    </div>
   </div>
 </div>
 
@@ -50,6 +57,12 @@
 {/if}
 
 <style>
+  .library {
+    display: contents;
+  }
+  .library.away {
+    display: none;
+  }
   .app {
     display: flex;
     flex-direction: column;

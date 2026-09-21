@@ -1,30 +1,35 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, hostMismatchText, SOURCE_LABEL, type GitSyncStatus, type InstallationPlan, type InstallRequest } from "$lib/api";
+  import { api, hostMismatchText, SOURCE_LABEL, type BatchPlan, type GitSyncStatus, type InstallRequest } from "$lib/api";
   import { BLOCK_LABEL, errorText } from "$lib/errors";
   import { store } from "$lib/store.svelte";
 
-  let { request, onclose }: { request?: InstallRequest; onclose: () => void } = $props();
+  /// `request`: the installs to review together; absent for a plain fetch of the library.
+  let { request, onclose }: { request?: InstallRequest[]; onclose: () => void } = $props();
   let dialog: HTMLDialogElement;
   let status = $state<GitSyncStatus | null>(null);
-  let plan = $state<InstallationPlan | null>(null);
+  let plan = $state<BatchPlan | null>(null);
+  const items = $derived(plan?.jobs.flatMap((j) => j.plan.items.map((item) => ({ ...item, project: j.project }))) ?? []);
+  const warnings = $derived(plan?.jobs.flatMap((j) => j.plan.warnings) ?? []);
+  const projects = $derived([...new Set(request?.map((r) => r.project) ?? [])]);
+  const projectName = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
   let busy = $state(false);
   let error = $state<string | null>(null);
   let success = $state<string | null>(null);
   let acceptHosts = $state(false);
   const canUpdate = $derived(!!status?.verified && !status.blocked && status.behind > 0 && status.ahead === 0 && !store.editorDirty);
-  const canInstall = $derived(!!plan && (plan.warnings.length === 0 || acceptHosts));
+  const canInstall = $derived(!!plan && (warnings.length === 0 || acceptHosts));
   /// Updating the library is only a choice when the remote is ahead of it.
   const offerUpdate = $derived(!request || (!!status?.verified && status.behind > 0));
   const installLabel = $derived(
-    !status?.verified ? "Installer sans vérification" : status.behind > 0 ? "Installer la version actuelle de la bibliothèque" : "Installer dans le projet",
+    !status?.verified ? "Installer sans vérification" : status.behind > 0 ? "Installer la version actuelle de la bibliothèque" : projects.length > 1 ? `Installer dans les ${projects.length} projets` : "Installer dans le projet",
   );
 
   /// Nothing to choose: the library is verified up to date, nothing blocks, no
   /// host warning, no unsaved edit to mention. The dialog then never shows.
   const nothingToDecide = () =>
     !!request && !!plan && !!status?.verified && !status.blocked && status.behind === 0 &&
-    plan.warnings.length === 0 && !store.editorDirty;
+    warnings.length === 0 && !store.editorDirty;
 
   onMount(async () => {
     if (!request) {
@@ -43,7 +48,7 @@
   async function load() {
     acceptHosts = false;
     if (request) {
-      plan = await api.prepareInstall(request.kind, request.ids, request.target);
+      plan = await api.prepareInstall(request);
       status = plan.git;
     } else {
       status = await api.checkLibraryGit();
@@ -59,14 +64,16 @@
     finally { busy = false; }
   }
 
-  async function performInstall(prepared: InstallationPlan) {
+  async function performInstall(prepared: BatchPlan) {
     if (!request) return;
-    await api.installSkills(prepared, request.project);
+    await api.installSkills(prepared);
     store.checked = new Set();
     await store.refreshProject();
-    const drafts = prepared.items.filter((i) => i.source_state !== "published").length;
+    const installed = prepared.jobs.flatMap((j) => j.plan.items);
+    const drafts = installed.filter((i) => i.source_state !== "published").length;
+    const where = projects.length === 1 ? projectName(projects[0]) : `${projects.length} projets`;
     store.notify(
-      `${prepared.items.length} élément(s) installé(s) dans ${store.projectName}` +
+      `${installed.length} élément(s) installé(s) dans ${where}` +
         (drafts ? ` (dont ${drafts} avec des modifications non publiées)` : ""),
     );
     onclose();
@@ -82,7 +89,7 @@
   async function update() {
     if (busy || !status || !canUpdate || (request && !canInstall)) return;
     busy = true; error = null; success = null;
-    const acceptedWarnings = JSON.stringify(plan?.warnings ?? []);
+    const acceptedWarnings = JSON.stringify(warnings);
     const accepted = acceptHosts;
     try {
       status = await api.updateLibraryGit(status.snapshot);
@@ -93,8 +100,9 @@
         plan = null;
         await load();
         if (plan && status?.verified && !status.blocked && status.behind === 0) {
-          const next = plan as InstallationPlan;
-          if (next.warnings.length === 0 || (accepted && JSON.stringify(next.warnings) === acceptedWarnings)) {
+          const next = plan as BatchPlan;
+          const nextWarnings = next.jobs.flatMap((j) => j.plan.warnings);
+          if (nextWarnings.length === 0 || (accepted && JSON.stringify(nextWarnings) === acceptedWarnings)) {
             await performInstall(next);
           } else {
             success = "Bibliothèque mise à jour. Vérifiez les nouveaux avertissements avant d’installer.";
@@ -109,9 +117,9 @@
 </script>
 
 <dialog bind:this={dialog} oncancel={(e) => { e.preventDefault(); if (!busy) onclose(); }} aria-labelledby="sync-title">
-  <h2 id="sync-title">{request ? "Installer dans le projet" : "Récupérer les changements Git"}</h2>
+  <h2 id="sync-title">{!request ? "Récupérer les changements Git" : projects.length > 1 ? `Installer dans ${projects.length} projets` : "Installer dans le projet"}</h2>
   {#if request}
-    <p class="selectable">{request.ids.join(", ")} : bibliothèque → {request.project}</p>
+    <p class="selectable">{[...new Set(request.flatMap((r) => r.ids))].join(", ")} : bibliothèque → {projects.map(projectName).join(", ")}</p>
     <p class="muted">La copie de la bibliothèque remplace celle du projet. Le dépôt distant est d’abord consulté, pour ne pas installer une version dépassée.</p>
   {/if}
   {#if status}
@@ -137,9 +145,9 @@
     <p class="warning">Des modifications ne sont pas enregistrées dans l’éditeur. L’installation utilise les fichiers sur disque. Enregistrez vos modifications avant de mettre à jour la bibliothèque.</p>
   {/if}
   {#if plan}
-    <ul>{#each plan.items as item}<li><strong>{item.id}</strong> — {SOURCE_LABEL[item.source_state]}</li>{/each}</ul>
-    {#if plan.warnings.length}
-      <div class="warning">{#each plan.warnings as warning}<p>{hostMismatchText(warning)}</p>{/each}</div>
+    <ul>{#each items as item}<li><strong>{item.id}</strong>{#if projects.length > 1} → {projectName(item.project)}{/if} — {SOURCE_LABEL[item.source_state]}</li>{/each}</ul>
+    {#if warnings.length}
+      <div class="warning">{#each warnings as warning}<p>{hostMismatchText(warning)}</p>{/each}</div>
       <label><input type="checkbox" bind:checked={acceptHosts} disabled={busy} /> Installer malgré ces incompatibilités de harnais</label>
     {/if}
   {/if}

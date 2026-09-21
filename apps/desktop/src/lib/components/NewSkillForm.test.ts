@@ -7,7 +7,7 @@ import NewSkillForm from "./NewSkillForm.svelte";
 beforeEach(() => {
   store.kind = "skill";
   store.libraries = { skill: libraryView([]), agent: null };
-  store.config = { library_path: "/lib", agents_path: null, recent_projects: [], editor_command: null };
+  store.config = { library_path: "/lib", agents_path: null, recent_projects: [], editor_command: null, tracked_projects: [] };
   store.registry = registryView();
   store.selectedId = null;
   store.editRequest = null;

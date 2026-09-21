@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { vi } from "vitest";
-import type { GitSyncStatus, InstallationPlan, LibraryView, PublicationPreview, RegistryView, Skill, ValueUsage } from "$lib/api";
+import type { BatchPlan, GitSyncStatus, InstallationPlan, LibraryView, PublicationPreview, RegistryView, Skill, ValueUsage } from "$lib/api";
 
 type Handler = (args: Record<string, unknown>) => unknown;
 
@@ -62,6 +62,12 @@ export function plan(git: GitSyncStatus | null, over: Partial<InstallationPlan> 
     items: [{ id: "one", source: "/lib/skills/one", hash: "hash-one", source_state: "published" }],
     git, git_error: null, warnings: [], ...over,
   };
+}
+
+/// A batch of one install into `project`, the shape of every install review.
+export function batch(git: GitSyncStatus | null, over: Partial<InstallationPlan> = {}, project = "/project"): BatchPlan {
+  const one = plan(git, over);
+  return { root: one.root, git, git_error: one.git_error, jobs: [{ project, plan: one }] };
 }
 
 export function publicationPreview(over: Partial<PublicationPreview> = {}): PublicationPreview {

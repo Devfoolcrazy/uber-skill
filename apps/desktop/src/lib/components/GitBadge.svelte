@@ -6,7 +6,7 @@
 
   const parts = $derived(
     [
-      state?.modified && { glyph: "●", cls: "modified", short: "Modifié", text: "Modifications locales non publiées" },
+      state?.modified && { glyph: "✎", cls: "modified", short: "Modifié", text: "Modifications locales non publiées" },
       state?.unpublished && { glyph: "↑", cls: "unpublished", short: "À envoyer", text: "Commit local pas encore envoyé au dépôt distant" },
       state?.outdated && { glyph: "↓", cls: "outdated", short: "À récupérer", text: "Version plus récente sur le dépôt distant (d’après la dernière récupération)" },
     ].filter((p) => !!p),

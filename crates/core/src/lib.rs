@@ -10,6 +10,7 @@ pub mod install;
 pub mod library;
 pub mod lint;
 pub mod model;
+pub mod projects;
 pub mod refine;
 pub mod registry;
 pub mod search;

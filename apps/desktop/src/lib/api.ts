@@ -57,6 +57,8 @@ export interface Config {
   agents_path: string | null;
   recent_projects: RecentProject[];
   editor_command: string | null;
+  /// Projects followed across the library; nothing leaves this list by itself.
+  tracked_projects: string[];
 }
 export interface Skill {
   kind: ItemKind;
@@ -174,7 +176,16 @@ export interface RefineProposal { id: string; original: string; proposed: string
 export type Facet = "category" | "tag";
 export interface ValueUsage { value: string; known: boolean; items: { kind: ItemKind; id: string }[] }
 export interface RegistryView { path: string; exists: boolean; categories: ValueUsage[]; tags: ValueUsage[] }
+/// One install: some items of one kind into one target of one project.
 export interface InstallRequest { kind: ItemKind; ids: string[]; project: string; target: Target }
+/// Several installs reviewed together, against a single check of the remote.
+export interface BatchPlan {
+  root: string; git: GitSyncStatus | null; git_error: ErrorPayload | null;
+  jobs: { project: string; plan: InstallationPlan }[];
+}
+export interface TargetInstall { target: Target; kind: ItemKind; items: InstalledSkill[] }
+export interface ProjectOverview { path: string; name: string; exists: boolean; installs: TargetInstall[]; behind: number }
+export const targetLabel = (t: Target) => TARGETS.find((x) => x.target.kind === t.kind)?.label ?? (t.kind === "custom" ? t.path : t.kind);
 
 export const api = {
   getConfig: () => invoke<Config>("get_config"),
@@ -185,7 +196,10 @@ export const api = {
     invoke<PublicationResult>("publish_library", { snapshot, paths, message }),
   checkLibraryGit: () => invoke<GitSyncStatus>("check_library_git"),
   updateLibraryGit: (snapshot: string) => invoke<GitSyncStatus>("update_library_git", { snapshot }),
-  prepareInstall: (kind: ItemKind, ids: string[], target: Target) => invoke<InstallationPlan>("prepare_install", { kind, ids, target }),
+  prepareInstall: (requests: InstallRequest[]) => invoke<BatchPlan>("prepare_install", { requests }),
+  projectsOverview: () => invoke<ProjectOverview[]>("projects_overview"),
+  trackProject: (path: string) => invoke<Config>("track_project", { path }),
+  untrackProject: (path: string) => invoke<Config>("untrack_project", { path }),
   applyLintFix: (kind: ItemKind, id: string, fix: LinkFix) => invoke<Skill>("apply_lint_fix", { kind, id, fix }),
   libraryGitStates: (kind: ItemKind) => invoke<Record<string, ItemGitState>>("library_git_states", { kind }),
   refinePropose: (kind: ItemKind, id: string, instruction: string) =>
@@ -218,8 +232,7 @@ export const api = {
   lintSkill: (kind: ItemKind, id: string) => invoke<Issue[]>("lint_skill", { kind, id }),
   projectStatus: (kind: ItemKind, project: string, target: Target) =>
     invoke<InstalledSkill[]>("project_status", { kind, project, target }),
-  installSkills: (plan: InstallationPlan, project: string) =>
-    invoke<LockEntry[]>("install_skills", { plan, project }),
+  installSkills: (plan: BatchPlan) => invoke<LockEntry[]>("install_skills", { plan }),
   uninstallSkill: (kind: ItemKind, id: string, project: string, target: Target) =>
     invoke<void>("uninstall_skill", { kind, id, project, target }),
   diffInstalled: (kind: ItemKind, id: string, project: string, target: Target) =>

@@ -1,6 +1,6 @@
 //! User configuration shared by the CLI and the desktop app.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +37,10 @@ pub struct Config {
     /// Command used to open a path in an external editor (e.g. `code`).
     #[serde(default)]
     pub editor_command: Option<String>,
+    /// Projects the user follows across the library, oldest first. Unlike
+    /// `recent_projects`, nothing drops out of this list by itself.
+    #[serde(default)]
+    pub tracked_projects: Vec<PathBuf>,
 }
 
 pub fn config_path() -> Option<PathBuf> {
@@ -55,7 +59,15 @@ impl Config {
             return Ok(Config::default());
         }
         let text = fsutil::read_to_string(&path)?;
-        Ok(serde_json::from_str(&text)?)
+        let mut cfg: Config = serde_json::from_str(&text)?;
+        // Configurations written before projects were followed: start from the recent ones.
+        if cfg.tracked_projects.is_empty() {
+            let recent: Vec<PathBuf> = cfg.recent_projects.iter().rev().map(|r| r.path.clone()).collect();
+            for project in &recent {
+                cfg.track_project(project);
+            }
+        }
+        Ok(cfg)
     }
 
     pub fn save(&self) -> Result<()> {
@@ -98,6 +110,19 @@ impl Config {
             crate::model::ItemKind::Skill => self.skills_path(),
             crate::model::ItemKind::Agent => self.agents_path(),
         }
+    }
+
+    /// Follow a project. Returns false when it already was.
+    pub fn track_project(&mut self, path: &Path) -> bool {
+        let known = self.tracked_projects.iter().any(|p| p == path);
+        if !known {
+            self.tracked_projects.push(path.to_path_buf());
+        }
+        !known
+    }
+
+    pub fn untrack_project(&mut self, path: &Path) {
+        self.tracked_projects.retain(|p| p != path);
     }
 
     pub fn remember_project(&mut self, path: PathBuf, target: Target) {

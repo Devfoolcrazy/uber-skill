@@ -38,6 +38,7 @@
             <span class="name">{s.id}</span>
             {#if st}<span class="dot {st.state}" title={DRIFT_LABEL[st.state]}></span>{/if}
             <GitBadge state={store.gitStateOf(s.id)} />
+            {#if store.behindElsewhere(s.id) > 0}<span class="elsewhere" title="Copies en retard dans d’autres projets suivis">↻{store.behindElsewhere(s.id)}</span>{/if}
             <span class="spacer"></span>
             {#if s.category}<span class="chip cat">{s.category}</span>{/if}
             {#if s.hosts.length}<span class="chip host" title="Harnais : {s.hosts.join(', ')}">⌘ {s.hosts.join(", ")}</span>{/if}
@@ -58,6 +59,12 @@
 </div>
 
 <style>
+  .elsewhere {
+    color: var(--warn);
+    font-size: 11px;
+    font-weight: 600;
+    flex: none;
+  }
   .list {
     width: 340px;
     flex: none;

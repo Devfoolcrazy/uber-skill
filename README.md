@@ -112,10 +112,29 @@ retire l’élément de la bibliothèque elle-même. Cette suppression déplace 
 il peut être récupéré, et ne touche pas aux copies déjà installées.
 
 Dans la liste et dans le détail, un indicateur signale ce qui sépare chaque skill ou agent du dépôt distant,
-indépendamment du projet sélectionné : **●** modifications locales non publiées, **↑** commit local pas encore
+indépendamment du projet sélectionné : **✎** modifications locales non publiées, **↑** commit local pas encore
 envoyé, **↓** version plus récente sur le dépôt distant. Le bouton **Publier…** affiche le nombre d’éléments
 à publier. Ces états sont calculés à partir des données Git locales, sans accès réseau : **↓** reflète donc
 la dernière récupération (**Récupérer…** ou le contrôle avant installation).
+
+### Projets suivis
+
+L’onglet **Projets** répond à la question « où ce skill est-il installé, et où est-il en retard ? ». Un projet
+est suivi dès qu’un élément y est installé ; **+ Suivre un projet…** en ajoute un autre et **Retirer de la
+liste** cesse de le suivre, sans rien supprimer dans le projet. Rien ne sort de cette liste tout seul : un
+dossier déplacé ou supprimé y reste, marqué « introuvable ».
+
+Pour chaque projet, l’application inspecte toutes les cibles qui contiennent un verrou (`.claude`, `.agents`,
+`.cursor`, `.github`, et les dossiers personnalisés déjà utilisés) et liste skills et agents avec leur état.
+**Tout mettre à jour** ne remplace que les copies simplement en retard ; une copie modifiée dans le projet ou
+en conflit garde ses propres actions (diff, remonter dans la bibliothèque, garder la bibliothèque). On agit
+sur un projet sans en faire le projet courant ; **Travailler dans ce projet** le fait explicitement.
+
+Dans le détail d’un skill ou d’un agent, **Installé dans** liste les projets qui en ont une copie, avec
+**Mettre à jour partout**. Après un enregistrement, la notification indique combien de projets sont en retard,
+et la liste signale par « ↻ n » les éléments en retard ailleurs que dans le projet courant. Plusieurs projets
+sont mis à jour en un seul lot : le dépôt distant n’est consulté qu’une fois, et tous les projets sont
+vérifiés avant la première copie.
 
 ### Ouvrir une bibliothèque Git
 

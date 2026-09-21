@@ -42,7 +42,7 @@ describe("project copy after an edit", () => {
     await fireEvent.click(await screen.findByRole("button", { name: "Mettre à jour la copie du projet" }));
     expect(store.toast).toContain("La copie dans game est en retard");
     expect(store.gitDialog).toEqual({
-      install: { kind: "skill", ids: ["one"], project: "/work/game", target: { kind: "claude-code" } },
+      install: [{ kind: "skill", ids: ["one"], project: "/work/game", target: { kind: "claude-code" } }],
     });
   });
 });

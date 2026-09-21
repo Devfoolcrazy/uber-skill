@@ -13,7 +13,7 @@ beforeEach(() => {
   store.host = null;
   store.projectStatus = { skill: [], agent: [] };
   store.gitStates = { skill: {}, agent: {} };
-  store.config = { library_path: "/lib", agents_path: null, recent_projects: [], editor_command: null };
+  store.config = { library_path: "/lib", agents_path: null, recent_projects: [], editor_command: null, tracked_projects: [] };
 });
 
 describe("difference with the remote", () => {

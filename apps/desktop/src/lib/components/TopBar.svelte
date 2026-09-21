@@ -40,11 +40,16 @@
   <h1>Uber Skill</h1>
   <nav class="kinds">
     {#each KINDS as k (k)}
-      <button class:active={store.kind === k} onclick={() => store.setKind(k)}>
+      <button class:active={store.view === "library" && store.kind === k} onclick={() => store.setKind(k)}>
         {k === "skill" ? "Skills" : "Agents"}
         <span class="count">{store.libraries[k]?.skills.length ?? 0}</span>
       </button>
     {/each}
+    <button class:active={store.view === "projects"} title="Projets suivis et copies en retard sur la bibliothèque" onclick={() => (store.view = "projects")}>
+      Projets
+      <span class="count">{store.projects.length}</span>
+      {#if store.behindTotal > 0}<span class="late" title="Copies en retard, tous projets confondus">{store.behindTotal} en retard</span>{/if}
+    </button>
   </nav>
   <span class="spacer"></span>
 
@@ -106,6 +111,12 @@
 </header>
 
 <style>
+  .late {
+    margin-left: 4px;
+    color: var(--warn);
+    font-size: 11px;
+    font-weight: 600;
+  }
   .topbar {
     height: 44px;
     flex: none;

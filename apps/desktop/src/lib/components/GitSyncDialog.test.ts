@@ -2,15 +2,16 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { InstallRequest } from "$lib/api";
 import { store } from "$lib/store.svelte";
-import { bridge, libraryView, plan, skill, syncStatus } from "../../test/bridge";
+import { batch, bridge, libraryView, skill, syncStatus } from "../../test/bridge";
 import GitSyncDialog from "./GitSyncDialog.svelte";
 
-const request: InstallRequest = { kind: "skill", ids: ["one"], project: "/project", target: { kind: "claude-code" } };
+const request: InstallRequest[] = [{ kind: "skill", ids: ["one"], project: "/project", target: { kind: "claude-code" } }];
 const button = (name: string) => screen.getByRole("button", { name, hidden: true }) as HTMLButtonElement;
 const refreshes = {
   scan_library: () => libraryView([skill("one")]),
   project_status: () => [],
   get_registry: () => null,
+  projects_overview: () => [],
 };
 
 beforeEach(() => {
@@ -21,8 +22,8 @@ beforeEach(() => {
 
 describe("install verification", () => {
   it("updates, prepares again and installs the refreshed plan", async () => {
-    const behind = plan(syncStatus({ behind: 2, snapshot: "behind" }));
-    const fresh = plan(syncStatus({ snapshot: "fresh" }), {
+    const behind = batch(syncStatus({ behind: 2, snapshot: "behind" }));
+    const fresh = batch(syncStatus({ snapshot: "fresh" }), {
       items: [{ id: "one", source: "/lib/skills/one", hash: "hash-new", source_state: "published" }],
     });
     const prepared = [behind, fresh];
@@ -40,12 +41,12 @@ describe("install verification", () => {
 
     await waitFor(() => expect(onclose).toHaveBeenCalled());
     expect(calls("update_library_git")).toEqual([{ snapshot: "behind" }]);
-    expect(calls("install_skills")).toEqual([{ plan: fresh, project: "/project" }]);
+    expect(calls("install_skills")).toEqual([{ plan: fresh }]);
     expect(store.checked.size).toBe(0);
   });
 
   it("installs without showing the dialog when there is nothing to decide", async () => {
-    const fresh = plan(syncStatus(), {
+    const fresh = batch(syncStatus(), {
       items: [{ id: "one", source: "/lib/skills/one", hash: "hash-one", source_state: "local-draft" }],
     });
     const { calls } = bridge({ ...refreshes, prepare_install: () => fresh, install_skills: () => [] });
@@ -53,14 +54,14 @@ describe("install verification", () => {
     const { container } = render(GitSyncDialog, { request, onclose });
 
     await waitFor(() => expect(onclose).toHaveBeenCalled());
-    expect(calls("install_skills")).toEqual([{ plan: fresh, project: "/project" }]);
+    expect(calls("install_skills")).toEqual([{ plan: fresh }]);
     expect(container.querySelector("dialog")?.hasAttribute("open")).toBe(false);
     expect(store.toast).toContain("1 élément(s) installé(s) dans project (dont 1 avec des modifications non publiées)");
   });
 
   it("still asks when the library is up to date but something needs attention", async () => {
     store.editorDirty = true;
-    const { calls } = bridge({ ...refreshes, prepare_install: () => plan(syncStatus()), install_skills: () => [] });
+    const { calls } = bridge({ ...refreshes, prepare_install: () => batch(syncStatus()), install_skills: () => [] });
     const { container } = render(GitSyncDialog, { request, onclose: vi.fn() });
 
     await screen.findByText(/derniers changements distants/);
@@ -73,7 +74,7 @@ describe("install verification", () => {
   it("never falls back to a local install when the update fails", async () => {
     const { calls } = bridge({
       ...refreshes,
-      prepare_install: () => plan(syncStatus({ behind: 1 })),
+      prepare_install: () => batch(syncStatus({ behind: 1 })),
       update_library_git: () => { throw { code: "git-fast-forward-failed", message: "fast-forward failed", details: "error: local changes would be overwritten" }; },
       install_skills: () => [],
     });
@@ -91,7 +92,7 @@ describe("install verification", () => {
   });
 
   it("offers only an explicit local install when freshness cannot be verified", async () => {
-    const offline = plan(syncStatus({ verified: false, fetch_error: { code: "git-failed", message: "git failed", details: "Could not resolve host" } }), {
+    const offline = batch(syncStatus({ verified: false, fetch_error: { code: "git-failed", message: "git failed", details: "Could not resolve host" } }), {
       items: [{ id: "one", source: "/lib/skills/one", hash: "hash-one", source_state: "unverified" }],
     });
     const { calls } = bridge({ ...refreshes, prepare_install: () => offline, install_skills: () => [] });
@@ -104,13 +105,13 @@ describe("install verification", () => {
     await fireEvent.click(button("Installer sans vérification"));
 
     await waitFor(() => expect(onclose).toHaveBeenCalled());
-    expect(calls("install_skills")).toEqual([{ plan: offline, project: "/project" }]);
+    expect(calls("install_skills")).toEqual([{ plan: offline }]);
   });
 
   it("requires accepting host warnings before any install", async () => {
     bridge({
       ...refreshes,
-      prepare_install: () => plan(syncStatus({ behind: 1 }), { warnings: [{ id: "one", hosts: ["claude-code"], target: "Cursor" }] }),
+      prepare_install: () => batch(syncStatus({ behind: 1 }), { warnings: [{ id: "one", hosts: ["claude-code"], target: "Cursor" }] }),
     });
     render(GitSyncDialog, { request, onclose: vi.fn() });
 
@@ -124,7 +125,7 @@ describe("install verification", () => {
 
   it("blocks the update while the editor holds unsaved changes", async () => {
     store.editorDirty = true;
-    bridge({ ...refreshes, prepare_install: () => plan(syncStatus({ behind: 1 })) });
+    bridge({ ...refreshes, prepare_install: () => batch(syncStatus({ behind: 1 })) });
     render(GitSyncDialog, { request, onclose: vi.fn() });
 
     await screen.findByText(/1 commit\(s\) distant\(s\)/);

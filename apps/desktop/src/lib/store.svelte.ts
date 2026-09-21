@@ -9,6 +9,7 @@ import {
   type ItemGitState,
   type ItemKind,
   type LibraryView,
+  type ProjectOverview,
   type RegistryView,
   type Skill,
   type Target,
@@ -50,7 +51,39 @@ class AppStore {
   libraryBusy = $state(false);
   libraryGeneration = $state(0);
   editorDirty = $state(false);
-  gitDialog = $state<{ install?: InstallRequest } | null>(null);
+  gitDialog = $state<{ install?: InstallRequest[] } | null>(null);
+  /// Main area: the library (skills or agents), or the followed projects.
+  view = $state<"library" | "projects">("library");
+  /// Followed projects with what each has installed, across all their targets.
+  projects = $state<ProjectOverview[]>([]);
+
+  async refreshProjects() {
+    this.projects = this.config?.library_path ? await api.projectsOverview().catch(() => []) : [];
+  }
+
+  /// Every installed copy of an item of the current kind, one per project and target.
+  installationsOf(id: string, kind: ItemKind = this.kind) {
+    return this.projects.flatMap((project) =>
+      project.installs
+        .filter((i) => i.kind === kind)
+        .flatMap((i) => i.items.filter((item) => item.id === id).map((item) => ({ project, target: i.target, item }))),
+    );
+  }
+
+  /// How many other projects hold a copy of this item that is behind the library.
+  behindElsewhere(id: string): number {
+    return this.installationsOf(id).filter((c) => c.item.state === "library-updated" && c.project.path !== this.projectPath).length;
+  }
+
+  /// Copies simply behind the library, the only ones a bulk update touches.
+  get behindTotal(): number {
+    return this.projects.reduce((n, p) => n + p.behind, 0);
+  }
+
+  requestInstalls(requests: InstallRequest[]) {
+    if (requests.length > 0) this.gitDialog = { install: requests };
+  }
+
   /// Allowed categories and tags of the library, merged with the values in use.
   registry = $state<RegistryView | null>(null);
   registryOpen = $state(false);
@@ -95,7 +128,7 @@ class AppStore {
 
   requestInstall(ids: string[]) {
     if (!this.projectPath || !this.targetOk) return;
-    this.gitDialog = { install: { kind: this.kind, ids, project: this.projectPath, target: this.target } };
+    this.gitDialog = { install: [{ kind: this.kind, ids, project: this.projectPath, target: this.target }] };
   }
 
   async refreshAfterGit() {
@@ -216,6 +249,7 @@ class AppStore {
         await this.refreshRegistry();
       }
       const recent = this.config.recent_projects[0];
+      if (!recent) await this.refreshProjects();
       if (recent && (await api.pathExists(recent.path))) {
         this.projectPath = recent.path;
         this.target = recent.target;
@@ -225,6 +259,7 @@ class AppStore {
   }
 
   async setKind(kind: ItemKind) {
+    this.view = "library";
     if (kind === this.kind) return;
     this.kind = kind;
     this.selectedId = null;
@@ -299,6 +334,7 @@ class AppStore {
   async refreshProject() {
     if (!this.projectPath) {
       this.projectStatus = { skill: [], agent: [] };
+      await this.refreshProjects();
       return;
     }
     const [skill, agent] = await Promise.all([
@@ -306,6 +342,8 @@ class AppStore {
       api.projectStatus("agent", this.projectPath, this.target),
     ]);
     this.projectStatus = { skill, agent };
+    // Whatever changed the current project may have changed the others too.
+    await this.refreshProjects();
   }
 
   async setProject(path: string | null, target?: Target) {
@@ -317,19 +355,20 @@ class AppStore {
     });
   }
 
-  /// Remove the copy installed in the current project. The library is not touched.
-  async uninstall(id: string): Promise<boolean> {
-    const project = this.projectPath;
+  /// Remove an installed copy: from the current project, or from `where`. The library is not touched.
+  async uninstall(id: string, where?: { project: string; target: Target; kind: ItemKind; state: string }): Promise<boolean> {
+    const project = where?.project ?? this.projectPath;
     if (!project) return false;
-    const edited = ["project-modified", "conflict"].includes(this.statusOf(id)?.state ?? "");
+    const name = project.split("/").filter(Boolean).pop() ?? project;
+    const edited = ["project-modified", "conflict"].includes(where?.state ?? this.statusOf(id)?.state ?? "");
     const ok = await confirm(
-      `La copie installée dans ${this.projectName} sera supprimée. ${id} reste dans la bibliothèque.` +
+      `La copie installée dans ${name} sera supprimée. ${id} reste dans la bibliothèque.` +
         (edited ? "\n\nCette copie contient des modifications faites dans le projet : elles seront perdues." : ""),
       { title: `Retirer ${id} du projet ?`, kind: edited ? "warning" : "info", okLabel: "Retirer du projet", cancelLabel: "Annuler" },
     );
     if (!ok) return false;
-    const done = await this.run(`${id} retiré de ${this.projectName}`, async () => {
-      await api.uninstallSkill(this.kind, id, project, this.target);
+    const done = await this.run(`${id} retiré de ${name}`, async () => {
+      await api.uninstallSkill(where?.kind ?? this.kind, id, project, where?.target ?? this.target);
       await this.refreshProject();
       return true;
     });

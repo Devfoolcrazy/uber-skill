@@ -5,6 +5,7 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
+use uber_skill_core::projects;
 use uber_skill_core::refine;
 use uber_skill_core::registry::{self, Facet, OnUsed};
 use uber_skill_core::{
@@ -153,12 +154,10 @@ async fn update_library_git(state: State<'_, AppState>, snapshot: String) -> Cmd
 #[tauri::command]
 async fn prepare_install(
     state: State<'_, AppState>,
-    kind: ItemKind,
-    ids: Vec<String>,
-    target: Target,
-) -> CmdResult<git::installation::InstallationPlan> {
+    requests: Vec<git::installation::InstallRequest>,
+) -> CmdResult<git::installation::BatchPlan> {
     let cfg = state.config.lock().map_err(err)?.clone();
-    tauri::async_runtime::spawn_blocking(move || git::installation::prepare(&cfg, kind, &ids, &target))
+    tauri::async_runtime::spawn_blocking(move || git::installation::prepare_batch(&cfg, &requests))
         .await
         .map_err(err)?
         .map_err(err)
@@ -391,16 +390,51 @@ fn project_status(
 }
 
 #[tauri::command]
-async fn install_skills(
-    state: State<'_, AppState>,
-    plan: git::installation::InstallationPlan,
-    project: PathBuf,
-) -> CmdResult<Vec<LockEntry>> {
+async fn install_skills(state: State<'_, AppState>, plan: git::installation::BatchPlan) -> CmdResult<Vec<LockEntry>> {
     let cfg = state.config.lock().map_err(err)?.clone();
-    tauri::async_runtime::spawn_blocking(move || git::installation::install_prepared(&cfg, &plan, &project))
+    let projects: Vec<PathBuf> = plan.jobs.iter().map(|j| j.project.clone()).collect();
+    let entries = tauri::async_runtime::spawn_blocking(move || git::installation::install_batch(&cfg, &plan))
+        .await
+        .map_err(err)?
+        .map_err(err)?;
+    // Installing somewhere is what makes a project worth following.
+    let mut cfg = state.config.lock().map_err(err)?;
+    if projects
+        .iter()
+        .fold(false, |changed, p| cfg.track_project(p) || changed)
+    {
+        cfg.save().map_err(err)?;
+    }
+    Ok(entries)
+}
+
+/// Every followed project with what it has installed, across all its targets.
+#[tauri::command]
+async fn projects_overview(state: State<'_, AppState>) -> CmdResult<Vec<projects::ProjectOverview>> {
+    let cfg = state.config.lock().map_err(err)?.clone();
+    tauri::async_runtime::spawn_blocking(move || projects::overview(&cfg))
         .await
         .map_err(err)?
         .map_err(err)
+}
+
+#[tauri::command]
+fn track_project(state: State<AppState>, path: PathBuf) -> CmdResult<Config> {
+    if !path.is_dir() {
+        return Err(err(Error::NotADirectory(path)));
+    }
+    let mut cfg = state.config.lock().map_err(err)?;
+    cfg.track_project(&path);
+    cfg.save().map_err(err)?;
+    Ok(cfg.clone())
+}
+
+#[tauri::command]
+fn untrack_project(state: State<AppState>, path: PathBuf) -> CmdResult<Config> {
+    let mut cfg = state.config.lock().map_err(err)?;
+    cfg.untrack_project(&path);
+    cfg.save().map_err(err)?;
+    Ok(cfg.clone())
 }
 
 #[tauri::command]
@@ -553,6 +587,9 @@ pub fn run() {
             lint_skill,
             project_status,
             install_skills,
+            projects_overview,
+            track_project,
+            untrack_project,
             uninstall_skill,
             diff_installed,
             sync_skill,

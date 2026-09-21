@@ -3,7 +3,7 @@ import type { Config } from "./api";
 import { store } from "./store.svelte";
 import { bridge, libraryView, skill } from "../test/bridge";
 
-const config = (library_path: string): Config => ({ library_path, agents_path: null, recent_projects: [], editor_command: null });
+const config = (library_path: string): Config => ({ library_path, agents_path: null, recent_projects: [], editor_command: null, tracked_projects: [] });
 
 beforeEach(() => {
   store.config = config("/old");
@@ -72,7 +72,7 @@ describe("requestInstall", () => {
     store.projectPath = "/project";
     store.requestInstall(["one", "two"]);
     expect(store.gitDialog).toEqual({
-      install: { kind: "skill", ids: ["one", "two"], project: "/project", target: { kind: "claude-code" } },
+      install: [{ kind: "skill", ids: ["one", "two"], project: "/project", target: { kind: "claude-code" } }],
     });
   });
 });

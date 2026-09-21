@@ -196,11 +196,24 @@ Propositions du 21 septembre 2026, retenues par l’utilisateur pour être trait
   - À vérifier par l’utilisateur, faute de pouvoir piloter la fenêtre native : lancer `Uber Skill.app` depuis le Finder (et non depuis un terminal), puis contrôler que la bibliothèque se charge, que « Récupérer… » et « Publier… » trouvent Git, que « Raffiner… » trouve `claude`, que « Ouvrir dans l’éditeur » fonctionne, que l’aperçu Markdown et ses liens s’affichent, et que l’icône apparaît dans le Dock.
   - Non traité : signature avec un certificat Apple et notarisation (nécessaires pour distribuer l’application à d’autres sans avertissement de macOS), mise à jour automatique, build Intel ou universel.
 
-### 1. Vue « mes projets »
+### 1. Vue « mes projets » : implémentée, en attente du test utilisateur
 
-- Objectif : montrer les conséquences d’une modification au-delà du projet courant. Écran listant les projets récents avec, pour chacun, le nombre de copies en retard ; dans le détail d’un élément, « installé dans : projet A (à jour), projet B (en retard) » avec « Mettre à jour partout ».
-- Existant : `recent_projects` dans la configuration, verrous `.uber-skill.lock.json`, calcul de dérive par projet, contrôle de fraîcheur avant installation.
-- À décider : quels projets suivre (les récents, limités à 10 aujourd’hui, ou une liste explicite) ; que faire d’un projet déplacé ou supprimé ; faut-il scanner toutes les cibles d’un projet ou seulement la dernière utilisée ; « Mettre à jour partout » passe-t-il par un seul contrôle de fraîcheur pour tous les projets ; comportement quand une copie a été modifiée dans un projet (conflit).
+Décisions de l’utilisateur (21 septembre 2026) : liste explicite de projets suivis, alimentée à chaque installation et modifiable à la main ; scan de toutes les cibles qui contiennent un verrou ; un seul contrôle de fraîcheur pour un lot, avec installation directe quand il n’y a rien à décider ; vocabulaire « Projets », « copie en retard », « suivre un projet ».
+
+Réalisé : `tracked_projects` dans la configuration (amorcée à partir des projets récents), `crates/core/src/projects.rs`, installation par lot (`prepare_batch` / `install_batch` : un seul fetch, tous les projets validés avant la première copie), onglet « Projets », section « Installé dans » du détail, notification après enregistrement, marqueur « ↻ n » dans la liste. La vérification visuelle a aussi conduit à corriger l’en-tête du détail, dont les boutons débordaient.
+
+Vérifications effectuées : suite Rust complète (55 tests), `pnpm check`, 59 tests d’interface, et contrôle visuel du frontend compilé dans un navigateur avec une passerelle Tauri simulée et des données d’exemple. Non essayé dans l’application réelle.
+
+À tester :
+- Onglet « Projets » : vos projets récents doivent y figurer ; en installer un nouveau doit l’y ajouter.
+- Modifier un skill installé dans deux projets : la notification doit annoncer les projets en retard, « Installé dans » doit les lister, et « Mettre à jour partout » doit les traiter en une fois.
+- « Tout mettre à jour » sur un projet dont une copie a été modifiée à la main : cette copie ne doit pas être remplacée.
+- Un projet avec deux cibles (par exemple `.claude` et `.cursor`) : les deux doivent apparaître, chacune nommée.
+- Renommer ou déplacer un dossier de projet : il doit apparaître « introuvable », puis « Retirer de la liste ».
+- Agir sur un projet qui n’est pas le projet courant (diff, retirer une copie), puis vérifier que le projet courant n’a pas changé.
+- Passer sur « Projets » avec un fichier non enregistré dans l’éditeur, puis revenir : le texte doit être intact.
+
+Reste possible plus tard : « Tout mettre à jour » pour l’ensemble des projets d’un coup, tri et recherche dans la liste des projets.
 
 ### 2. Installation globale (`~/.claude/skills`)
 

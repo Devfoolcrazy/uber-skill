@@ -7,6 +7,7 @@
   import { issueText, SEVERITY_LABEL } from "$lib/lint";
   import { store, DRIFT_LABEL } from "$lib/store.svelte";
   import GitBadge from "./GitBadge.svelte";
+  import InstalledIn from "./InstalledIn.svelte";
   import MetaFields from "./MetaFields.svelte";
   import RefineDialog from "./RefineDialog.svelte";
 
@@ -135,7 +136,12 @@
   /// A saved change leaves the copy installed in the current project behind: say so right away.
   async function projectCopyChanged(id: string) {
     await store.refreshProject().catch(store.fail);
-    if (store.statusOf(id)?.state === "library-updated") {
+    const behind = store.installationsOf(id).filter((c) => c.item.state === "library-updated");
+    const elsewhere = behind.filter((c) => c.project.path !== store.projectPath);
+    if (elsewhere.length > 0) {
+      const n = new Set(behind.map((c) => c.project.path)).size;
+      store.notify(`Enregistré. ${n} projet${n > 1 ? "s ont" : " a"} une copie en retard : voir « Installé dans ».`);
+    } else if (store.statusOf(id)?.state === "library-updated") {
       store.notify(`Enregistré. La copie dans ${store.projectName} est en retard : « Mettre à jour la copie du projet ».`);
     }
   }
@@ -219,7 +225,8 @@
         <h2 class="selectable">{skill.id}</h2>
         {#if skill.category}<span class="chip cat" class:unknown={!store.isKnown("category", skill.category)} title={store.isKnown("category", skill.category) ? undefined : "Catégorie absente du référentiel"}>{skill.category}</span>{/if}
         <GitBadge state={store.gitStateOf(skill.id)} full />
-        <span class="spacer"></span>
+      </div>
+      <div class="row actions">
         {#if store.projectPath}
           {#if !installed}
             <button class="small primary" disabled={!store.targetOk} title={store.targetOk ? "" : "Cette cible ne gère pas les agents"} onclick={installHere}>Installer dans {store.projectName}</button>
@@ -227,8 +234,8 @@
             {#if installed.state === "library-updated"}
               <button class="small primary" disabled={!store.targetOk} title="La bibliothèque contient une version plus récente que la copie installée dans ce projet" onclick={installHere}>Mettre à jour la copie du projet</button>
             {/if}
-            <button class="small" onclick={() => (store.drawerOpen = true)} title="Voir dans les installés">
-              <span class="dot {installed.state}"></span> {DRIFT_LABEL[installed.state]}
+            <button class="small" onclick={() => (store.drawerOpen = true)} title={`${DRIFT_LABEL[installed.state]} · voir les éléments installés dans ce projet`}>
+              <span class="dot {installed.state}"></span> Installés
             </button>
             <button class="small" title="Supprime la copie installée dans ce projet ; l’élément reste dans la bibliothèque" onclick={() => store.uninstall(skill!.id)}>Retirer du projet…</button>
           {/if}
@@ -241,6 +248,7 @@
         <button class="small danger" title="Supprime l’élément de la bibliothèque elle-même, pas seulement d’un projet" onclick={() => store.deleteFromLibrary(skill!.id)}>Supprimer de la bibliothèque…</button>
       </div>
       <p class="desc selectable">{skill.description}</p>
+      <InstalledIn {skill} />
       <div class="wrap">
         {#each skill.tags as t}<span class="chip" class:unknown={!store.isKnown("tag", t)} title={store.isKnown("tag", t) ? undefined : "Tag absent du référentiel"}>{t}</span>{/each}
         {#if skill.hosts.length}
@@ -354,6 +362,13 @@
   }
   h2 {
     font-family: var(--mono);
+    overflow-wrap: anywhere;
+  }
+  header .row {
+    flex-wrap: wrap;
+  }
+  .actions :global(button) {
+    white-space: nowrap;
   }
   .desc {
     margin: 0;
