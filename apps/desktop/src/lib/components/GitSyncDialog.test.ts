@@ -44,20 +44,30 @@ describe("install verification", () => {
     expect(store.checked.size).toBe(0);
   });
 
-  it("offers a single install action when the library is already up to date", async () => {
-    const fresh = plan(syncStatus());
+  it("installs without showing the dialog when there is nothing to decide", async () => {
+    const fresh = plan(syncStatus(), {
+      items: [{ id: "one", source: "/lib/skills/one", hash: "hash-one", source_state: "local-draft" }],
+    });
     const { calls } = bridge({ ...refreshes, prepare_install: () => fresh, install_skills: () => [] });
     const onclose = vi.fn();
-    render(GitSyncDialog, { request, onclose });
-
-    await screen.findByText(/derniers changements distants/);
-    expect(screen.queryByRole("button", { name: /Mettre à jour/, hidden: true })).toBeNull();
-    const install = button("Installer dans le projet");
-    expect(install.classList.contains("primary")).toBe(true);
-    await fireEvent.click(install);
+    const { container } = render(GitSyncDialog, { request, onclose });
 
     await waitFor(() => expect(onclose).toHaveBeenCalled());
     expect(calls("install_skills")).toEqual([{ plan: fresh, project: "/project" }]);
+    expect(container.querySelector("dialog")?.hasAttribute("open")).toBe(false);
+    expect(store.toast).toContain("1 élément(s) installé(s) dans project (dont 1 avec des modifications non publiées)");
+  });
+
+  it("still asks when the library is up to date but something needs attention", async () => {
+    store.editorDirty = true;
+    const { calls } = bridge({ ...refreshes, prepare_install: () => plan(syncStatus()), install_skills: () => [] });
+    const { container } = render(GitSyncDialog, { request, onclose: vi.fn() });
+
+    await screen.findByText(/derniers changements distants/);
+    await waitFor(() => expect(container.querySelector("dialog")?.hasAttribute("open")).toBe(true));
+    expect(calls("install_skills")).toEqual([]);
+    expect(screen.queryByRole("button", { name: /Mettre à jour/, hidden: true })).toBeNull();
+    expect(button("Installer dans le projet").classList.contains("primary")).toBe(true);
   });
 
   it("never falls back to a local install when the update fails", async () => {

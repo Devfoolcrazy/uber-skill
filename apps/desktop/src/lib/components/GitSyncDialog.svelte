@@ -20,7 +20,25 @@
     !status?.verified ? "Installer sans vérification" : status.behind > 0 ? "Installer la version actuelle de la bibliothèque" : "Installer dans le projet",
   );
 
-  onMount(() => { dialog.showModal(); refresh(); });
+  /// Nothing to choose: the library is verified up to date, nothing blocks, no
+  /// host warning, no unsaved edit to mention. The dialog then never shows.
+  const nothingToDecide = () =>
+    !!request && !!plan && !!status?.verified && !status.blocked && status.behind === 0 &&
+    plan.warnings.length === 0 && !store.editorDirty;
+
+  onMount(async () => {
+    if (!request) {
+      dialog.showModal();
+      return refresh();
+    }
+    store.notify("Vérification du dépôt distant…");
+    await refresh();
+    if (nothingToDecide() && plan) {
+      busy = true;
+      try { return await performInstall(plan); } catch (e) { error = errorText(e); } finally { busy = false; }
+    }
+    dialog.showModal();
+  });
 
   async function load() {
     acceptHosts = false;
@@ -46,7 +64,11 @@
     await api.installSkills(prepared, request.project);
     store.checked = new Set();
     await store.refreshProject();
-    store.notify(`${prepared.items.length} élément(s) installé(s)`);
+    const drafts = prepared.items.filter((i) => i.source_state !== "published").length;
+    store.notify(
+      `${prepared.items.length} élément(s) installé(s) dans ${store.projectName}` +
+        (drafts ? ` (dont ${drafts} avec des modifications non publiées)` : ""),
+    );
     onclose();
   }
 
