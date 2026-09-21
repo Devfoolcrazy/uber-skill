@@ -10,7 +10,7 @@ Avancer étape par étape : chaque livraison doit être testée par l’utilisat
 4. **Référentiel de tags/catégories et administration : implémentés et validés par l’utilisateur.** Fichier `uber-skill.yaml` versionné à la racine, commun aux skills et agents, tolérant aux valeurs inconnues ; page « Tags et catégories » (ajout, renommage partout, suppression avec remplacement ou retrait explicite, mise en correspondance des valeurs inconnues) ; sélecteurs dans l’éditeur et le formulaire de création ; avertissements de lint ; commandes CLI `registry`.
 5. **Création de skills/agents avec templates intégrés : implémentée et validée par l’utilisateur.** Modèles distincts dans `crates/core/src/templates/`, refus d’écraser quoi que ce soit, ouverture immédiate du brouillon dans l’éditeur.
 6. **Raffinement assisté du `SKILL.md` : implémenté et validé par l’utilisateur.** `claude -p` sans outil ni session, modèle par défaut du CLI ; la proposition peut modifier le corps et la description, le reste du frontmatter est verrouillé ; diff, puis acceptation ou rejet explicites.
-7. Passe UI/UX : après validation du fonctionnel.
+7. **Passe UI/UX : réalisée, en attente du test utilisateur.** Constats de lint et avertissements de scan rédigés en français à partir de codes, correction en un clic d’un lien cassé et ajout au référentiel depuis l’onglet Lint, installation directe quand il n’y a rien à décider.
 8. Évolutions à venir : voir la section « Évolutions à venir » en fin de document. À traiter une par une, avec le même circuit (décisions, implémentation, test utilisateur).
 
 ### Test utilisateur de l’étape 1
@@ -24,11 +24,22 @@ Vérifications effectuées : `cargo test` (13 tests réussis, dont 3 tests Git s
 
 ### Retours UI/UX à traiter lors de la passe finale
 
-- Retour utilisateur (test de l’étape 4) : confusion entre la publication Git et la mise à jour de la copie du projet ; après « Publier… », l’élément restait « Bibliothèque plus récente » et le contrôle d’installation ne proposait que « Installer la version locale », « Mettre à jour puis installer » restant grisé. Traité : libellés distinguant les deux synchronisations, une seule action « Installer dans le projet » quand la bibliothèque est à jour, mise à jour de la bibliothèque proposée seulement quand elle est en retard. Traité aussi, à la demande de l’utilisateur : après l’enregistrement d’un élément installé dans le projet courant, le détail propose directement « Mettre à jour la copie du projet » et la notification le signale. À revoir lors de la passe finale : éviter le dialogue quand il n’y a rien à décider.
+- Retour utilisateur (test de l’étape 4) : confusion entre la publication Git et la mise à jour de la copie du projet ; après « Publier… », l’élément restait « Bibliothèque plus récente » et le contrôle d’installation ne proposait que « Installer la version locale », « Mettre à jour puis installer » restant grisé. Traité : libellés distinguant les deux synchronisations, une seule action « Installer dans le projet » quand la bibliothèque est à jour, mise à jour de la bibliothèque proposée seulement quand elle est en retard. Traité aussi, à la demande de l’utilisateur : après l’enregistrement d’un élément installé dans le projet courant, le détail propose directement « Mettre à jour la copie du projet » et la notification le signale. Dialogue évité quand il n’y a rien à décider : traité lors de la passe UI/UX.
 - Retour utilisateur (test de l’étape 6) : après la modification d’un skill non installé dans le projet courant, rien n’indiquait l’écart avec le dépôt distant. Traité : indicateur par élément (●/↑/↓) dans la liste et le détail, compteur sur « Publier… », à partir des données Git locales.
-- Retour utilisateur : un clic sur un lien relatif de l’aperçu (`cheatsheet.md`) menait à une page 404 sans retour possible, alors que le lien était valide. Traité : les liens de l’aperçu ne naviguent plus (fichier du skill ouvert sur place, lien web dans le navigateur, lien cassé signalé), page d’erreur avec « Revenir à la bibliothèque » en filet de sécurité, lint des liens étendu à tous les fichiers Markdown du skill avec suggestion. À étudier : correction en un clic d’un lien cassé à partir de la suggestion.
+- Retour utilisateur : un clic sur un lien relatif de l’aperçu (`cheatsheet.md`) menait à une page 404 sans retour possible, alors que le lien était valide. Traité : les liens de l’aperçu ne naviguent plus (fichier du skill ouvert sur place, lien web dans le navigateur, lien cassé signalé), page d’erreur avec « Revenir à la bibliothèque » en filet de sécurité, lint des liens étendu à tous les fichiers Markdown du skill avec suggestion. Correction en un clic ajoutée lors de la passe UI/UX.
 - Retour utilisateur : en voulant retirer un élément d’un projet, le bouton « Supprimer » du détail l’a supprimé de la bibliothèque. Traité : « Retirer du projet… » ajouté dans le détail, bouton renommé « Supprimer de la bibliothèque… », confirmations natives qui disent ce qui est détruit et orientent vers la bonne action, suppression déplacée dans la Corbeille au lieu d’être définitive.
-- Relevé pendant l’étape 4 : les messages de lint et les avertissements de scan sont encore rédigés en anglais dans le `core` et affichés tels quels dans l’application. Les traduire côté application à partir de `rule`, selon la convention des codes d’erreur.
+- Relevé pendant l’étape 4 : les messages de lint et les avertissements de scan étaient rédigés en anglais dans le `core`. Traité lors de la passe UI/UX (codes et arguments, libellés dans `lint.ts`).
+
+### Test utilisateur de l’étape 7
+
+Vérifications effectuées : suite Rust complète (53 tests, dont l’application des corrections de liens et la présence d’un libellé français pour chaque constat de lint), `pnpm check` sans erreur ni avertissement, 52 tests d’interface. L’interface n’a pas été essayée dans l’application réelle.
+
+- Onglet Lint d’un skill : vérifier que les constats et les niveaux (Erreur, Avertissement, Info) sont en français.
+- Casser un lien à la main dans un `SKILL.md` (par exemple `[x](ch01.md)` alors que le fichier est dans `chapters/`) : le constat doit proposer le bon chemin et « Corriger » doit réparer le lien sans toucher au reste du fichier. Vérifier le résultat dans « Publier… ».
+- Sur un tag inconnu, « Ajouter au référentiel » depuis l’onglet Lint : le constat disparaît et le tag apparaît dans « Tags et catégories… ».
+- Mettre deux skills avec le même identifiant dans la bibliothèque, ou un `SKILL.md` au frontmatter invalide : l’avertissement de la barre latérale doit être en français.
+- Installer ou mettre à jour la copie d’un projet avec une bibliothèque à jour : aucune fenêtre ne doit s’ouvrir, une notification confirme l’installation (et signale un brouillon non publié le cas échéant).
+- Vérifier que le dialogue s’ouvre toujours quand il y a quelque chose à décider : bibliothèque en retard, hors ligne, harnais incompatible, modifications non enregistrées dans l’éditeur.
 
 ### Test utilisateur de l’étape 4
 
@@ -179,7 +190,7 @@ Propositions du 21 septembre 2026, retenues par l’utilisateur pour être trait
 
 ### Préalables, avant d’ajouter des fonctionnalités
 
-- **Passe UI/UX (étape 7)** : traiter les retours consignés plus haut. Restent ouverts : messages de lint et avertissements de scan encore en anglais (à traduire côté application à partir de `rule`), dialogue d’installation à éviter quand il n’y a rien à décider, correction en un clic d’un lien cassé.
+- **Passe UI/UX (étape 7)** : réalisée, en attente du test utilisateur.
 - **Build de production** : jamais essayé. Vérifier le lancement depuis le Finder (PATH minimal : `git` et `claude` doivent être trouvés), l’icône, le nom de l’application, la signature. Tous les tests d’interface actuels passent par une passerelle Tauri simulée.
 
 ### 1. Vue « mes projets »

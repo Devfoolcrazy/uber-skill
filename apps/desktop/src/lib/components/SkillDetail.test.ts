@@ -101,3 +101,30 @@ describe("links in the preview", () => {
     expect(vi.mocked(openUrl)).toHaveBeenCalledWith("https://example.com/doc");
   });
 });
+
+describe("lint tab", () => {
+  it("words findings in French and fixes a broken link in one click", async () => {
+    const finding = {
+      severity: "warning", rule: "link", code: "link-missing", args: ["ch01.md", "SKILL.md", "chapters/ch01.md"],
+      message: "linked file not found: ch01.md; did you mean chapters/ch01.md?",
+      fix: { file: "SKILL.md", from: "ch01.md", to: "chapters/ch01.md" },
+    };
+    const lints = [[finding, { severity: "info", rule: "tags", code: "brand-new-code", args: [], message: "english fallback" }], []];
+    const { calls } = bridge({
+      read_skill_file: () => TEXT,
+      lint_skill: () => lints.shift(),
+      apply_lint_fix: () => skill("one", { hash: "fixed" }),
+      project_status: () => [],
+    });
+    render(SkillDetail);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Lint" }));
+    expect(await screen.findByText("Lien vers un fichier introuvable : ch01.md. Ce fichier existe ici : chapters/ch01.md")).toBeTruthy();
+    expect(screen.getByText("Avertissement")).toBeTruthy();
+    expect(screen.getByText("english fallback")).toBeTruthy();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Corriger" }));
+    expect(await screen.findByText("Aucun problème détecté.")).toBeTruthy();
+    expect(calls("apply_lint_fix")).toEqual([{ kind: "skill", id: "one", fix: finding.fix }]);
+  });
+});

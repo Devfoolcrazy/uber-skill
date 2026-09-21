@@ -3,6 +3,7 @@
   import { marked } from "marked";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { api, splitFrontmatter, type Issue, type Skill } from "$lib/api";
+  import { issueText, SEVERITY_LABEL } from "$lib/lint";
   import { store, DRIFT_LABEL } from "$lib/store.svelte";
   import GitBadge from "./GitBadge.svelte";
   import MetaFields from "./MetaFields.svelte";
@@ -141,6 +142,27 @@
     issues = null;
     await load(s, mainFile(s));
     await projectCopyChanged(s.id);
+  }
+
+  async function fixIssue(i: Issue) {
+    if (!skill || !i.fix || dirty) return;
+    const fix = i.fix;
+    const s = await store.run(`Lien corrigé dans ${fix.file}`, () => api.applyLintFix(store.kind, skill!.id, fix));
+    if (s) {
+      store.replaceSkill(s);
+      issues = null;
+      await load(s, currentFile);
+      await projectCopyChanged(s.id);
+    }
+  }
+
+  async function allow(i: Issue) {
+    const facet = i.code === "tag-unknown" ? "tag" : "category";
+    const view = await store.run(`« ${i.args[0]} » ajouté au référentiel`, () => api.registryAdd(facet, i.args[0]));
+    if (view) {
+      store.registry = view;
+      issues = null;
+    }
   }
 
   function openMeta() {
@@ -285,7 +307,14 @@
         {:else}
           <ul class="issues">
             {#each issues as i}
-              <li class={i.severity}><span class="sev">{i.severity}</span><code>{i.rule}</code><span class="selectable">{i.message}</span></li>
+              <li class={i.severity}>
+                <span class="sev">{SEVERITY_LABEL[i.severity]}</span><code>{i.rule}</code><span class="selectable">{issueText(i)}</span>
+                {#if i.fix}
+                  <button class="small" disabled={dirty} title={dirty ? "Enregistrez vos modifications avant de corriger" : `Remplacer ${i.fix.from} par ${i.fix.to} dans ${i.fix.file}`} onclick={() => fixIssue(i)}>Corriger</button>
+                {:else if i.code === "tag-unknown" || i.code === "category-unknown"}
+                  <button class="small" onclick={() => allow(i)}>Ajouter au référentiel</button>
+                {/if}
+              </li>
             {/each}
           </ul>
         {/if}
@@ -461,7 +490,8 @@
     align-items: baseline;
   }
   .sev {
-    width: 60px;
+    width: 96px;
+    flex: none;
     font-size: 11px;
     text-transform: uppercase;
     font-weight: 600;

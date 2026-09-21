@@ -77,6 +77,8 @@ export interface Skill {
 export interface ScanWarning {
   path: string;
   message: string;
+  error?: ErrorPayload;
+  duplicate_of?: string;
 }
 export interface LibraryView {
   kind: ItemKind;
@@ -116,10 +118,15 @@ export interface FileDiff {
   unified: string;
 }
 export type Severity = "info" | "warning" | "error";
+export interface LinkFix { file: string; from: string; to: string }
 export interface Issue {
   severity: Severity;
   rule: string;
+  /// Stable identifier, worded in lint.ts from `args`; `message` is the English fallback.
+  code: string;
+  args: string[];
   message: string;
+  fix?: LinkFix;
 }
 
 export interface PublicationPreview {
@@ -179,6 +186,7 @@ export const api = {
   checkLibraryGit: () => invoke<GitSyncStatus>("check_library_git"),
   updateLibraryGit: (snapshot: string) => invoke<GitSyncStatus>("update_library_git", { snapshot }),
   prepareInstall: (kind: ItemKind, ids: string[], target: Target) => invoke<InstallationPlan>("prepare_install", { kind, ids, target }),
+  applyLintFix: (kind: ItemKind, id: string, fix: LinkFix) => invoke<Skill>("apply_lint_fix", { kind, id, fix }),
   libraryGitStates: (kind: ItemKind) => invoke<Record<string, ItemGitState>>("library_git_states", { kind }),
   refinePropose: (kind: ItemKind, id: string, instruction: string) =>
     invoke<RefineProposal>("refine_propose", { kind, id, instruction }),

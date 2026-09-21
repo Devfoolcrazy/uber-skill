@@ -220,6 +220,8 @@ impl Library {
                     result.warnings.push(ScanWarning {
                         path: e.path().map(Path::to_path_buf).unwrap_or_default(),
                         message: e.to_string(),
+                        error: None,
+                        duplicate_of: None,
                     });
                     continue;
                 }
@@ -242,6 +244,8 @@ impl Library {
                                 item.id,
                                 prev.display()
                             ),
+                            error: None,
+                            duplicate_of: Some(prev.clone()),
                         });
                         continue;
                     }
@@ -251,6 +255,8 @@ impl Library {
                 Err(e) => result.warnings.push(ScanWarning {
                     path: path.to_path_buf(),
                     message: e.to_string(),
+                    error: Some((&e).into()),
+                    duplicate_of: None,
                 }),
             }
         }

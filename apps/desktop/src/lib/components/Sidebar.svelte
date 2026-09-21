@@ -1,6 +1,7 @@
 <script lang="ts">
   import { store } from "$lib/store.svelte";
   import { hostKind, KIND_LABEL } from "$lib/api";
+  import { warningText } from "$lib/lint";
   import LibraryChooser from "./LibraryChooser.svelte";
   import PublishLibrary from "./PublishLibrary.svelte";
 
@@ -144,7 +145,7 @@
       <section>
         <h3>Avertissements</h3>
         {#each store.library.warnings as w}
-          <div class="warn selectable" title={w.path}>{w.message}</div>
+          <div class="warn selectable" title={w.path}>{w.path.split("/").pop()} : {warningText(w)}</div>
         {/each}
       </section>
     {/if}

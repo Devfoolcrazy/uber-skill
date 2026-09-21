@@ -65,7 +65,14 @@ pub struct Skill {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScanWarning {
     pub path: PathBuf,
+    /// English, for the CLI and as a fallback.
     pub message: String,
+    /// The item could not be read: why, as a coded error a front end can word.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<crate::error::ErrorPayload>,
+    /// The item was skipped because this path already provides the same id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duplicate_of: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]

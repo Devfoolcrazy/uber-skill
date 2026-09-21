@@ -164,6 +164,15 @@ async fn prepare_install(
         .map_err(err)
 }
 
+/// Apply a fix proposed by the lint, then return the refreshed item.
+#[tauri::command]
+fn apply_lint_fix(state: State<AppState>, kind: ItemKind, id: String, fix: lint::LinkFix) -> CmdResult<Skill> {
+    let lib = open_library(&state, kind)?;
+    let skill = lib.get(&id).map_err(err)?;
+    lint::apply_link_fix(&skill.path, &fix).map_err(err)?;
+    lib.get(&id).map_err(err)
+}
+
 /// Items that differ from the tracked remote branch, by id. Local Git data only.
 #[tauri::command]
 async fn library_git_states(
@@ -495,6 +504,7 @@ pub fn run() {
             check_library_git,
             update_library_git,
             prepare_install,
+            apply_lint_fix,
             library_git_states,
             refine_propose,
             refine_accept,

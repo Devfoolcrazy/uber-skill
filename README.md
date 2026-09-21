@@ -153,7 +153,7 @@ Les modifications non enregistrées dans l’éditeur empêchent la mise à jour
 Chaque installation depuis l’application (unitaire, groupée, skill ou agent, réinstallation ou mise
 à jour depuis le tiroir « Installés ») ouvre le même contrôle :
 
-- Bibliothèque à jour avec le dépôt distant : une seule action, **Installer dans le projet**. Elle copie les fichiers présents dans la bibliothèque, y compris un brouillon non publié.
+- Bibliothèque à jour avec le dépôt distant et rien à signaler : l’installation se fait directement, sans dialogue, et la notification précise si un brouillon non publié a été installé. Si quelque chose mérite votre attention (incompatibilité de harnais, modifications non enregistrées dans l’éditeur), le dialogue s’ouvre avec une seule action, **Installer dans le projet**.
 - Bibliothèque en retard : **Mettre à jour la bibliothèque puis installer** récupère la version distante, recharge les éléments choisis et les installe ; **Installer la version actuelle de la bibliothèque** reste possible.
 - Si le réseau ou les accès Git empêchent la vérification, **Installer sans vérification** reste un choix explicite.
 - Si la mise à jour échoue, aucune installation ne suit automatiquement.
@@ -217,7 +217,7 @@ sont désactivées tant que l’éditeur contient des modifications non enregist
 Le `core` ne produit aucun texte destiné à l’utilisateur : une erreur porte un code stable
 (`git-stale`, `blocked.diverged`, `input.clone-url`…), un message anglais pour les logs et le CLI, et des
 détails jamais traduits (chemin, identifiant, sortie de Git). L’application traduit les codes dans
-`apps/desktop/src/lib/errors.ts` ; un test du `core` échoue si un code n’y a pas de libellé.
+`apps/desktop/src/lib/errors.ts` ; un test du `core` échoue si un code n’y a pas de libellé. Les constats du lint et les avertissements de scan suivent la même règle (`lint.ts`). Dans l’onglet Lint, **Corriger** applique la correction d’un lien cassé quand le fichier existe ailleurs dans le skill, et **Ajouter au référentiel** accepte un tag ou une catégorie inconnus.
 
 ## Tests
 
