@@ -11,6 +11,7 @@ Avancer étape par étape : chaque livraison doit être testée par l’utilisat
 5. **Création de skills/agents avec templates intégrés : implémentée et validée par l’utilisateur.** Modèles distincts dans `crates/core/src/templates/`, refus d’écraser quoi que ce soit, ouverture immédiate du brouillon dans l’éditeur.
 6. **Raffinement assisté du `SKILL.md` : implémenté et validé par l’utilisateur.** `claude -p` sans outil ni session, modèle par défaut du CLI ; la proposition peut modifier le corps et la description, le reste du frontmatter est verrouillé ; diff, puis acceptation ou rejet explicites.
 7. Passe UI/UX : après validation du fonctionnel.
+8. Évolutions à venir : voir la section « Évolutions à venir » en fin de document. À traiter une par une, avec le même circuit (décisions, implémentation, test utilisateur).
 
 ### Test utilisateur de l’étape 1
 
@@ -171,3 +172,78 @@ Précisions : la copie porte sur les fichiers enregistrés sur disque ; chaque l
 ### Évolution possible, hors première version
 
 - Étendre le raffinement aux agents et, si nécessaire, aux fichiers associés aux skills.
+
+## Évolutions à venir
+
+Propositions du 21 septembre 2026, retenues par l’utilisateur pour être traitées au fur et à mesure. Aucune n’est spécifiée : chaque entrée liste l’objectif, ce qui existe déjà et les décisions à prendre avant de coder. L’ordre reflète le rapport bénéfice/effort estimé, pas un engagement.
+
+### Préalables, avant d’ajouter des fonctionnalités
+
+- **Passe UI/UX (étape 7)** : traiter les retours consignés plus haut. Restent ouverts : messages de lint et avertissements de scan encore en anglais (à traduire côté application à partir de `rule`), dialogue d’installation à éviter quand il n’y a rien à décider, correction en un clic d’un lien cassé.
+- **Build de production** : jamais essayé. Vérifier le lancement depuis le Finder (PATH minimal : `git` et `claude` doivent être trouvés), l’icône, le nom de l’application, la signature. Tous les tests d’interface actuels passent par une passerelle Tauri simulée.
+
+### 1. Vue « mes projets »
+
+- Objectif : montrer les conséquences d’une modification au-delà du projet courant. Écran listant les projets récents avec, pour chacun, le nombre de copies en retard ; dans le détail d’un élément, « installé dans : projet A (à jour), projet B (en retard) » avec « Mettre à jour partout ».
+- Existant : `recent_projects` dans la configuration, verrous `.uber-skill.lock.json`, calcul de dérive par projet, contrôle de fraîcheur avant installation.
+- À décider : quels projets suivre (les récents, limités à 10 aujourd’hui, ou une liste explicite) ; que faire d’un projet déplacé ou supprimé ; faut-il scanner toutes les cibles d’un projet ou seulement la dernière utilisée ; « Mettre à jour partout » passe-t-il par un seul contrôle de fraîcheur pour tous les projets ; comportement quand une copie a été modifiée dans un projet (conflit).
+
+### 2. Installation globale (`~/.claude/skills`)
+
+- Objectif : installer un skill ou un agent pour l’utilisateur, hors de tout projet.
+- Existant : toute la mécanique d’installation, de verrou et de dérive ; il manque une cible dont la racine est le dossier personnel.
+- À décider : emplacement du verrou dans `~/.claude` ; quelles cibles ont un équivalent global (Claude Code oui ; Codex, Cursor, Copilot à vérifier) ; présentation dans l’interface (un « projet » spécial ou une entrée à part) ; cohabitation avec des skills globaux installés à la main (état « non suivi »).
+
+### 3. Essayer un skill
+
+- Objectif : vérifier qu’un skill se déclenche et fait ce qui est attendu, ce que ni le lint ni le raffinement ne garantissent. Action « Essayer » : lancer `claude -p` avec le skill chargé et une demande de test, afficher la réponse.
+- Existant : lancement de `claude -p` (recherche de l’exécutable, délai, erreurs), installation d’un brouillon dans un dossier.
+- À décider : où s’exécute l’essai (dossier temporaire avec le skill installé, ou projet choisi par l’utilisateur) ; quels outils autoriser et avec quel mode de permission, puisqu’un skill utile en a besoin contrairement au raffinement ; comment savoir si le skill s’est réellement déclenché (sortie `stream-json`) ; conservation de demandes de test par skill pour les rejouer ; coût et durée d’un essai. C’est la fonctionnalité la plus différenciante et la plus délicate : à spécifier soigneusement.
+
+### 4. Corrections en un clic du lint
+
+- Objectif : appliquer depuis l’onglet Lint la correction d’un lien cassé (la suggestion existe), d’un nom différent du dossier, d’un tag ou d’une catégorie inconnus (ajout au référentiel ou remplacement).
+- Existant : règles de lint avec `rule`, suggestion de lien, opérations du référentiel, édition ciblée du frontmatter.
+- À décider : forme de la correction renvoyée par le `core` (remplacement de texte localisé, ou action nommée) ; corrections proposées une par une ou groupées ; même mécanisme en ligne de commande (`lint --fix`). À coupler avec la traduction des messages de lint.
+
+### 5. Historique d’un élément
+
+- Objectif : onglet « Historique » avec les commits touchant l’élément, le diff de chacun, et « Revenir à cette version ». Rassure avant d’accepter un raffinement ou de récupérer une mise à jour distante.
+- Existant : exécution de Git, affichage de diffs, états par élément.
+- À décider : « Revenir à cette version » restaure les fichiers comme une modification locale à publier (recommandé) plutôt que de réécrire l’historique ; gestion des renommages et des éléments déplacés ; nombre de versions affichées ; historique d’un élément supprimé et restauration depuis Git en complément de la Corbeille.
+
+### 6. Raffinement étendu
+
+- Objectif : étendre le raffinement aux agents (déjà noté comme évolution possible), et proposer un raffinement de la seule `description`, avec deux ou trois variantes à comparer, puisqu’elle décide du déclenchement.
+- Existant : `refine.rs`, verrouillage du frontmatter, dialogue de proposition.
+- À décider : consigne système adaptée aux agents (clés `tools` et `model` verrouillées) ; présentation et choix entre plusieurs variantes ; inclure ou non les autres fichiers Markdown du skill dans ce qui est envoyé à Claude, et avec quelle limite de taille.
+
+### 7. Import depuis une URL Git
+
+- Objectif : importer un skill publié dans un dépôt (ou un sous-dossier de dépôt) en conservant sa provenance, et signaler quand l’amont a changé.
+- Existant : clonage sécurisé, import d’un dossier local sans écrasement.
+- À décider : où enregistrer la provenance (`metadata.source` dans le frontmatter, ou fichier à part) ; clonage temporaire puis copie, sans sous-module ; choix du sous-dossier quand le dépôt contient plusieurs skills ; comment comparer avec l’amont et proposer la mise à jour sans écraser des modifications locales ; attention portée au contenu importé (scripts) avant installation.
+
+### 8. Dupliquer un élément
+
+- Objectif : créer un skill ou un agent à partir d’un existant plutôt que du modèle.
+- Existant : import avec nouvel identifiant, refus d’écraser.
+- À décider : mise à jour automatique du `name` et du titre dans le fichier copié ; reprise ou non des tags et de la catégorie ; ouverture immédiate en édition comme pour une création.
+
+### 9. Surveillance du disque
+
+- Objectif : recharger la bibliothèque quand des fichiers changent hors de l’application, à la place du bouton « Recharger ».
+- Existant : rechargement manuel, garde sur les modifications non enregistrées de l’éditeur.
+- À décider : comportement quand le fichier ouvert dans l’éditeur interne change sur disque alors qu’il contient des modifications non enregistrées (ne jamais écraser, signaler) ; temporisation pour éviter les rechargements en rafale lors d’une opération Git ; surveiller aussi le projet courant pour l’état de dérive.
+
+### 10. Recherche dans le contenu
+
+- Objectif : chercher dans le corps des fichiers d’un skill, et pas seulement dans le nom, les tags et la description.
+- Existant : recherche par jetons avec score, liste des fichiers texte d’un élément.
+- À décider : recherche à la demande ou index en mémoire construit au scan ; fichiers inclus (Markdown seulement, ou tous les fichiers texte) ; affichage des extraits et ouverture du fichier trouvé à la bonne ligne ; poids du contenu par rapport au nom et aux tags dans le classement.
+
+### Écarté pour le moment
+
+- Gestion de branches, fusions et résolution de conflits dans l’application : les outils Git le font mieux, et la décision de s’en remettre à un outil externe a été validée.
+- Éditeur enrichi (coloration, autocomplétion) : « Ouvrir dans l’éditeur » existe, et l’application n’a pas vocation à devenir un IDE.
+- Partage public ou place de marché : prématuré tant que la bibliothèque est personnelle.
