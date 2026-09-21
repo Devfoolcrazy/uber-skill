@@ -10,7 +10,7 @@ Avancer étape par étape : chaque livraison doit être testée par l’utilisat
 4. **Référentiel de tags/catégories et administration : implémentés et validés par l’utilisateur.** Fichier `uber-skill.yaml` versionné à la racine, commun aux skills et agents, tolérant aux valeurs inconnues ; page « Tags et catégories » (ajout, renommage partout, suppression avec remplacement ou retrait explicite, mise en correspondance des valeurs inconnues) ; sélecteurs dans l’éditeur et le formulaire de création ; avertissements de lint ; commandes CLI `registry`.
 5. **Création de skills/agents avec templates intégrés : implémentée et validée par l’utilisateur.** Modèles distincts dans `crates/core/src/templates/`, refus d’écraser quoi que ce soit, ouverture immédiate du brouillon dans l’éditeur.
 6. **Raffinement assisté du `SKILL.md` : implémenté et validé par l’utilisateur.** `claude -p` sans outil ni session, modèle par défaut du CLI ; la proposition peut modifier le corps et la description, le reste du frontmatter est verrouillé ; diff, puis acceptation ou rejet explicites.
-7. **Passe UI/UX : réalisée, en attente du test utilisateur.** Constats de lint et avertissements de scan rédigés en français à partir de codes, correction en un clic d’un lien cassé et ajout au référentiel depuis l’onglet Lint, installation directe quand il n’y a rien à décider.
+7. **Passe UI/UX : réalisée et validée par l’utilisateur.** Constats de lint et avertissements de scan rédigés en français à partir de codes, correction en un clic d’un lien cassé et ajout au référentiel depuis l’onglet Lint, installation directe quand il n’y a rien à décider.
 8. Évolutions à venir : voir la section « Évolutions à venir » en fin de document. À traiter une par une, avec le même circuit (décisions, implémentation, test utilisateur).
 
 ### Test utilisateur de l’étape 1
@@ -190,7 +190,7 @@ Propositions du 21 septembre 2026, retenues par l’utilisateur pour être trait
 
 ### Préalables, avant d’ajouter des fonctionnalités
 
-- **Passe UI/UX (étape 7)** : réalisée, en attente du test utilisateur.
+- **Passe UI/UX (étape 7)** : réalisée et validée par l’utilisateur.
 - **Build de production** : jamais essayé. Vérifier le lancement depuis le Finder (PATH minimal : `git` et `claude` doivent être trouvés), l’icône, le nom de l’application, la signature. Tous les tests d’interface actuels passent par une passerelle Tauri simulée.
 
 ### 1. Vue « mes projets »
