@@ -126,7 +126,7 @@ retrait. « Global » est toujours en tête de l’onglet Projets et compte dans
 « Mettre à jour partout ». Les skills déjà présents dans ces dossiers, installés à la main, apparaissent
 « non suivis » avec « Lier à la bibliothèque » ou « Importer dans la bibliothèque » ; ils ne sont jamais
 modifiés sans votre choix. Dans la liste, un globe 🌐 signale une copie globale, coloré selon son état.
-En ligne de commande : `uber-skill install <id> -p ~`.
+En ligne de commande : `uber-skill install <id> -p ~`. Emplacements confirmés par la documentation de Codex : `.agents/skills` du dossier courant à la racine du dépôt, puis `~/.agents/skills` ; `~/.codex` ne sert qu’à sa configuration et à ses skills système. Codex n’a pas de dossier d’agents, et n’applique aucune priorité entre un skill global et un skill de projet de même nom.
 
 ### Mode d’emploi embarqué
 

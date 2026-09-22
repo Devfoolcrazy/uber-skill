@@ -38,6 +38,8 @@ Cochez des éléments dans la liste, ou utilisez « Installer dans … » dans l
 
 Le tiroir « Installés » et l'onglet « Projets » listent les copies et leurs états : « Mettre à jour », « Diff », « Remonter dans la bibliothèque » (la copie du projet devient la version de référence), « Retirer du projet… ». Une copie modifiée dans le projet n'est jamais remplacée en lot.
 
+Pour Codex, un skill se place dans `.agents/skills` (projet) ou `~/.agents/skills` (global) ; `~/.codex` ne contient que sa configuration et ses skills système. Codex n'a pas de dossier d'agents, d'où « (pas d'agents) » sur cette cible. Un même skill installé à la fois globalement et dans un projet apparaît deux fois dans Codex, alors que Claude Code donne la priorité au projet.
+
 Les skills déjà présents dans les dossiers globaux, installés à la main, apparaissent « non suivis » : « Lier à la bibliothèque » s'ils y existent déjà, « Importer dans la bibliothèque » sinon. Rien n'est modifié tant que vous ne choisissez pas.
 
 ## Projets
