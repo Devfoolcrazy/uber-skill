@@ -196,7 +196,7 @@ Propositions du 21 septembre 2026, retenues par l’utilisateur pour être trait
   - À vérifier par l’utilisateur, faute de pouvoir piloter la fenêtre native : lancer `Uber Skill.app` depuis le Finder (et non depuis un terminal), puis contrôler que la bibliothèque se charge, que « Récupérer… » et « Publier… » trouvent Git, que « Raffiner… » trouve `claude`, que « Ouvrir dans l’éditeur » fonctionne, que l’aperçu Markdown et ses liens s’affichent, et que l’icône apparaît dans le Dock.
   - Non traité : signature avec un certificat Apple et notarisation (nécessaires pour distribuer l’application à d’autres sans avertissement de macOS), mise à jour automatique, build Intel ou universel.
 
-### 1. Vue « mes projets » : implémentée, en attente du test utilisateur
+### 1. Vue « mes projets » : implémentée et validée par l’utilisateur
 
 Décisions de l’utilisateur (21 septembre 2026) : liste explicite de projets suivis, alimentée à chaque installation et modifiable à la main ; scan de toutes les cibles qui contiennent un verrou ; un seul contrôle de fraîcheur pour un lot, avec installation directe quand il n’y a rien à décider ; vocabulaire « Projets », « copie en retard », « suivre un projet ».
 
