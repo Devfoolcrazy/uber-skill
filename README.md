@@ -1,282 +1,130 @@
-# Uber Skill
+<p align="center">
+  <img src="apps/desktop/app-icon.png" width="96" alt="">
+</p>
 
-Gestionnaire de bibliothèque de skills (dossiers contenant un `SKILL.md`) et d'agents
-(fichiers `<nom>.md` au format sous-agent Claude Code).
-Le disque est la source de vérité : une bibliothèque est un simple dossier, les tags et la
-catégorie vivent dans le frontmatter sous `metadata`, et l'app ne fait qu'indexer.
+<h1 align="center">Uber Skill</h1>
 
-```
-crates/core      bibliothèque Rust : scan, frontmatter, install, dérive, lint, config
-crates/cli       binaire `uber-skill`
-apps/desktop     app Tauri v2 + SvelteKit
-```
+<p align="center">
+  Une bibliothèque Git pour vos skills et agents Claude Code et Codex,<br>
+  et l'outil qui les installe, les compare et les met à jour partout où ils servent.
+</p>
 
-## Concepts
+<p align="center">
+  <a href="#le-problème">Le problème</a> ·
+  <a href="#ce-que-fait-uber-skill">Ce que fait Uber Skill</a> ·
+  <a href="#captures-décran">Captures</a> ·
+  <a href="#installation">Installation</a> ·
+  <a href="#ligne-de-commande">CLI</a> ·
+  <a href="docs/reference.md">Référence</a>
+</p>
 
-- **Bibliothèque** : un dossier racine avec `skills/` et `agents/` (à défaut, les skills sont cherchés à la racine et les agents dans `_AGENTS`).
-- **Skills** : chaque sous-dossier de `skills/` avec un `SKILL.md` (imbrication autorisée, symlinks suivis, dossiers `_xxx` ignorés).
-- **Agents** : chaque fichier `.md` avec frontmatter dans `agents/` (ou le dossier configuré avec `config set-agents`). Ils s'installent dans `.claude/agents/<nom>.md` (cible Claude Code uniquement) avec la même mécanique de verrou et de dérive.
-- **Installer** : copie le skill dans le projet (`.claude/skills`, `.agents/skills`, `.cursor/skills`, `.github/skills` ou un dossier custom) et écrit un verrou `.uber-skill.lock.json` avec la source et le hash du contenu.
-- **Dérive** : à partir du verrou, chaque skill installé est `up-to-date`, `library-updated`, `project-modified`, `conflict`, `untracked`, `missing` ou `source-missing`. On peut voir le diff, tirer la version bibliothèque (`pull`) ou remonter la version projet (`push`).
-- **Harnais** : un skill est universel par défaut. S'il dépend d'un outil (frontmatter `allowed-tools`, outils MCP, sous-agents…), on le déclare dans `metadata.hosts` (`claude-code`, `codex`, `cursor`, `copilot`). L'app filtre dessus et avertit à l'installation si la cible ne correspond pas.
-- **Référentiel** : `uber-skill.yaml` à la racine de la bibliothèque liste les catégories et tags autorisés, communs aux skills et aux agents, et versionnés avec eux. Il est tolérant : une valeur absente du référentiel ne bloque ni le scan, ni l'import, ni l'édition ; elle est seulement signalée comme inconnue. Sans ce fichier, toutes les valeurs sont acceptées.
-- **Lint** : nom = dossier, description présente et < 1024 caractères, corps non vide, liens relatifs existants dans tous les fichiers Markdown du skill (avec suggestion quand un fichier du même nom existe ailleurs), hosts connus, catégorie et tags présents dans le référentiel (avertissement).
-
-Frontmatter reconnu :
-
-```yaml
 ---
-name: review-pr
-description: Relit une pull request…
-metadata:
-  category: review
-  tags: git, quality
-  hosts: claude-code   # optionnel, seulement si le skill dépend d'un harnais
----
+
+## Le problème
+
+Les skills et les agents sont des fichiers Markdown que les outils d'IA chargent pour savoir comment faire une tâche. Ils sont précieux, et ils sont partout : dans `.claude/skills` de chaque projet, dans `~/.claude/skills` pour la machine, dans `.agents/skills` pour Codex. Très vite :
+
+- **On ne sait plus quelle copie est la bonne.** Un skill amélioré dans un projet n'est pas celui installé dans les trois autres.
+- **Les copies dérivent en silence.** Une modification faite « juste pour ce projet » n'est jamais remontée, et une amélioration de la version de référence n'est jamais redescendue.
+- **Rien n'est versionné.** Pas d'historique, pas de sauvegarde, pas de synchronisation entre deux machines.
+- **Un skill mal décrit ne se déclenche pas**, et rien ne le signale.
+
+Uber Skill part d'un principe simple : **la bibliothèque est un dépôt Git, chaque installation est une copie suivie**, et l'outil ne fait que comparer et copier. Pas de base de données, pas d'état caché : si vous supprimez l'application, vos fichiers sont exactement là où ils sont.
+
+## Ce que fait Uber Skill
+
+**Une bibliothèque, dans Git.** Vos skills (dossiers avec un `SKILL.md`) et vos agents (fichiers `.md` au format sous-agent Claude Code) vivent dans un dépôt que vous ouvrez ou clonez depuis l'application. Enregistrer et publier sont deux actions distinctes : vous travaillez en local, puis « Publier… » montre les changements et vous choisissez ce qui part dans le commit. « Récupérer… » ramène ce qui a été publié depuis une autre machine, en avance rapide seulement ; les fusions restent à votre outil Git.
+
+**Des installations suivies.** Installer copie un élément dans un projet, ou globalement pour toute la machine, avec un verrou qui mémorise sa provenance et son empreinte. L'application sait ensuite dire, pour chaque copie : à jour, en retard sur la bibliothèque, modifiée dans le projet, en conflit. Elle propose le diff, la mise à jour, ou la remontée de la version du projet dans la bibliothèque. Avant de copier, elle vérifie le dépôt distant pour ne jamais installer une version dépassée.
+
+**Une vue par projet.** L'onglet « Projets » répond à « où ce skill est-il installé, et où est-il en retard ? ». Modifier un skill installé dans quatre projets, puis « Mettre à jour partout » : un seul contrôle, quatre copies à jour, sans jamais écraser une copie modifiée à la main.
+
+**Des skills mieux écrits.** Un lint vérifie le nom, la description, les liens entre fichiers (et corrige les liens cassés en un clic), les tags par rapport à un référentiel versionné avec la bibliothèque. « Raffiner… » envoie un `SKILL.md` à Claude avec votre consigne et affiche la proposition sous forme de diff, à accepter ou rejeter ; le nom et les métadonnées sont verrouillés.
+
+**Le même moteur en ligne de commande.** Le CLI `uber-skill` couvre les mêmes opérations, avec `--json`, pour les scripts et le CI.
+
+## Captures d'écran
+
+**La bibliothèque.** Filtres par catégorie, tag et harnais ; pour chaque élément, son état dans le projet courant, son écart avec le dépôt distant (✎ modifié, ↑ à envoyer, ↓ à récupérer), un globe s'il est installé globalement. Le détail montre où il est installé et propose « Mettre à jour partout ».
+
+![La bibliothèque](docs/screenshots/bibliotheque.png)
+
+**Les projets.** Chaque projet suivi, toutes cibles confondues, avec ce qui est en retard. « Tout mettre à jour » ne touche que les copies simplement en retard ; une copie modifiée dans le projet garde ses propres actions.
+
+![Les projets](docs/screenshots/projets.png)
+
+**Publier.** Les fichiers modifiés sur disque, y compris hors de l'application, avec leur diff. Vous cochez ce qui part dans le commit ; le reste reste un brouillon local.
+
+![Publier](docs/screenshots/publier.png)
+
+**Raffiner avec Claude.** Une consigne, une proposition en diff, rien n'est écrit avant « Accepter ».
+
+![Raffiner](docs/screenshots/raffiner.png)
+
+## Principes
+
+- **Le disque est la source de vérité.** Une bibliothèque est un dossier `skills/` + `agents/` dans un dépôt Git. Les tags, la catégorie et les harnais requis vivent dans le frontmatter du `SKILL.md`, sous `metadata`, donc restent portables.
+- **Rien n'est écrasé sans le dire.** Les confirmations disent ce qui est détruit ; une suppression de la bibliothèque part dans la Corbeille ; une mise à jour groupée épargne les copies modifiées.
+- **Git fait le versionnage, pas l'application.** Avance rapide et push sans force uniquement ; branches, fusions et conflits se règlent dans un outil Git.
+- **Au plus près de l'usage.** Claude Code et Codex sont couverts de bout en bout ; l'application ne cherche pas à être exhaustive sur les autres outils.
+- **Les erreurs ont un code.** Le cœur Rust ne produit aucun texte destiné à l'utilisateur ; l'application les rédige en français et un test échoue si un code n'a pas de libellé.
+
+## Installation
+
+Prérequis : [Rust](https://rustup.rs), [pnpm](https://pnpm.io), Git. Pour « Raffiner… », la commande `claude` de Claude Code, connectée.
+
+```sh
+git clone https://github.com/<vous>/uber_skill.git
+cd uber_skill/apps/desktop
+pnpm install
+pnpm tauri dev          # développement
+pnpm tauri build        # target/release/bundle/macos/Uber Skill.app et .dmg
 ```
 
-## CLI
+Au premier lancement, **Ouvrir / Cloner…** pointe sur un dépôt Git contenant `skills/` et `agents/` (un dossier vide initialisé avec `git init` suffit). Le bouton **?** de la barre du haut ouvre le mode d'emploi embarqué.
+
+L'application n'est pas signée avec un certificat Apple : une copie téléchargée demande un clic droit › Ouvrir la première fois.
+
+## Ligne de commande
 
 ```sh
 cargo build -p uber-skill-cli
 ./target/debug/uber-skill config set-library ~/ma-bibliotheque
 ./target/debug/uber-skill list --tag git
-./target/debug/uber-skill search "pull request"
-./target/debug/uber-skill new review-pr -d "…" -c review --tag git
-./target/debug/uber-skill tag review-pr --add quality --category review --host claude-code
-./target/debug/uber-skill list --host codex   # skills utilisables dans Codex
-./target/debug/uber-skill lint
-./target/debug/uber-skill install review-pr commit-message -p ~/mon/projet -t claude
+./target/debug/uber-skill new review-pr -d "Relit une pull request" -c review --tag git
+./target/debug/uber-skill install review-pr -p ~/mon/projet     # -p ~ pour installer globalement
 ./target/debug/uber-skill status -p ~/mon/projet
-./target/debug/uber-skill diff review-pr -p ~/mon/projet
-./target/debug/uber-skill sync review-pr push -p ~/mon/projet
-
-# Agents : mêmes commandes avec --kind agent (ou -k agent)
-./target/debug/uber-skill -k agent list
-./target/debug/uber-skill -k agent install coder reviewer -p ~/mon/projet
-./target/debug/uber-skill -k agent status -p ~/mon/projet
-
-# Référentiel de catégories et de tags (uber-skill.yaml)
-./target/debug/uber-skill registry show                      # valeurs autorisées, inconnues, et leur usage
-./target/debug/uber-skill registry init                      # crée le référentiel à partir des valeurs utilisées
-./target/debug/uber-skill registry add tag quality
-./target/debug/uber-skill registry rename tag quality rigor  # met aussi à jour les skills et agents
-./target/debug/uber-skill registry remove tag git --replace-with rigor   # ou --strip
-
-# Dépôt Git de la bibliothèque
-./target/debug/uber-skill remote status                      # fetch + commits et fichiers en attente
-./target/debug/uber-skill remote update                      # avance rapide uniquement
-./target/debug/uber-skill remote publish skills/review-pr/SKILL.md -m "Clarifie review-pr"
-./target/debug/uber-skill remote publish --all -m "…"        # tous les fichiers modifiés
-./target/debug/uber-skill remote publish                     # renvoie les commits locaux en attente
+./target/debug/uber-skill remote status                         # fetch, commits et fichiers en attente
+./target/debug/uber-skill remote publish --all -m "Clarifie review-pr"
+./target/debug/uber-skill registry rename tag quality rigor     # dans le référentiel et tous les éléments
+./target/debug/uber-skill refine review-pr -m "ajoute un exemple" --apply
+./target/debug/uber-skill lint
 ```
 
-`--json` sur toutes les commandes de lecture. `--library <dir>` ou `UBER_SKILL_LIBRARY` remplace la config.
-La config est dans `~/Library/Application Support/com.lefebvreremy.uber-skill/config.json` (ou `UBER_SKILL_CONFIG`).
+`--json` sur toutes les commandes de lecture, `-k agent` pour travailler sur les agents. La liste complète est dans la [référence](docs/reference.md).
 
-## App de bureau
+## Sous le capot
+
+```
+crates/core      moteur Rust : scan, frontmatter, installation, dérive, Git, référentiel, lint, raffinement
+crates/cli       binaire uber-skill
+apps/desktop     application Tauri v2 + SvelteKit 5
+docs/            référence détaillée et captures d'écran
+```
+
+Le cœur est partagé par l'application et le CLI. Ses tests tournent sur de vrais dépôts Git temporaires ; ceux de l'interface passent par une passerelle Tauri simulée.
 
 ```sh
-cd apps/desktop
-pnpm install
-pnpm tauri dev
+cargo test                                    # moteur et CLI
+cd apps/desktop && pnpm check && pnpm test    # types, puis interface (vitest)
 ```
 
-Build de production (macOS) :
+## Documentation
 
-```sh
-cd apps/desktop
-pnpm tauri build      # target/release/bundle/macos/Uber Skill.app et bundle/dmg/*.dmg
-```
+- [Référence](docs/reference.md) : chaque fonctionnalité en détail, ses règles et ses limites.
+- [Mode d'emploi](apps/desktop/src/lib/guide.md) : le guide embarqué dans l'application.
+- [Feuille de route](TODOS.md) : décisions prises, étapes validées, évolutions à venir.
 
-L’application n’est pas signée avec un certificat Apple : au premier lancement d’une copie téléchargée,
-macOS demande de confirmer l’ouverture (clic droit › Ouvrir). Lancée depuis le Finder, elle complète son
-`PATH` avec `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, `~/.cargo/bin` et `~/.claude/local` pour
-trouver Git, l’éditeur externe et la commande `claude`. L’aperçu Markdown est assaini et une politique de
-sécurité du contenu interdit tout script qui ne vient pas de l’application : un skill importé ne peut pas
-agir sur la bibliothèque. L’icône se régénère avec `pnpm tauri icon app-icon.png`.
+## Licence
 
-Barre du haut : bascule Skills / Agents, sélecteur de projet et de cible, bouton « Installés » avec badge de dérive, réglages.
-Colonnes : filtres (catégories, tags, harnais) · liste avec recherche et cases à cocher · détail (aperçu markdown, éditeur ⌘S, fichiers, lint, tags & catégorie).
-Dans l'aperçu, un lien vers un fichier du skill l'ouvre sur place (rendu Markdown, retour vers `SKILL.md`), un lien web s'ouvre dans le navigateur, un lien cassé est signalé sans quitter l'écran.
-Barre flottante quand des éléments sont cochés : installation dans le projet courant. Tiroir « Installés » : état de dérive, diff, pull/push, retirer.
-
-### Deux synchronisations distinctes
-
-- **Bibliothèque ↔ dépôt distant** : **Publier…** envoie vos modifications, **Récupérer…** reçoit celles des autres. Cela ne touche jamais aux projets.
-- **Bibliothèque → projet** : l’installation copie un skill ou un agent dans un projet. Le tiroir « Installés » compare ensuite cette copie à la bibliothèque. Modifier un skill dans la bibliothèque met donc la copie du projet « en retard », qu’il soit publié ou non ; **Mettre à jour la copie du projet** la rafraîchit.
-
-Deux retraits à ne pas confondre : **Retirer du projet…** supprime seulement la copie installée dans le projet
-courant (avec un avertissement si elle contient des modifications locales) ; **Supprimer de la bibliothèque…**
-retire l’élément de la bibliothèque elle-même. Cette suppression déplace l’élément dans la Corbeille, d’où
-il peut être récupéré, et ne touche pas aux copies déjà installées.
-
-Dans la liste et dans le détail, un indicateur signale ce qui sépare chaque skill ou agent du dépôt distant,
-indépendamment du projet sélectionné : **✎** modifications locales non publiées, **↑** commit local pas encore
-envoyé, **↓** version plus récente sur le dépôt distant. Le bouton **Publier…** affiche le nombre d’éléments
-à publier. Ces états sont calculés à partir des données Git locales, sans accès réseau : **↓** reflète donc
-la dernière récupération (**Récupérer…** ou le contrôle avant installation).
-
-### Installation globale
-
-Le sélecteur de projet propose **🌐 Global (cette machine)** : les copies vont dans vos dossiers personnels
-(`~/.claude/skills`, `~/.claude/agents` pour Claude Code ; `~/.agents/skills` pour Codex) et sont disponibles
-dans tous les projets. Tout le reste fonctionne comme pour un projet : verrou, état de dérive, mise à jour,
-retrait. « Global » est toujours en tête de l’onglet Projets et compte dans « Installé dans » et
-« Mettre à jour partout ». Les skills déjà présents dans ces dossiers, installés à la main, apparaissent
-« non suivis » avec « Lier à la bibliothèque » ou « Importer dans la bibliothèque » ; ils ne sont jamais
-modifiés sans votre choix. Dans la liste, un globe 🌐 signale une copie globale, coloré selon son état.
-En ligne de commande : `uber-skill install <id> -p ~`. Emplacements confirmés par la documentation de Codex : `.agents/skills` du dossier courant à la racine du dépôt, puis `~/.agents/skills` ; `~/.codex` ne sert qu’à sa configuration et à ses skills système. Codex n’a pas de dossier d’agents, et n’applique aucune priorité entre un skill global et un skill de projet de même nom.
-
-### Mode d’emploi embarqué
-
-Le bouton **?** de la barre du haut ouvre un guide en français, `apps/desktop/src/lib/guide.md`, embarqué
-dans l’application. Il décrit les concepts, les indicateurs et les parcours ; à tenir à jour avec les
-fonctionnalités.
-
-### Projets suivis
-
-L’onglet **Projets** répond à la question « où ce skill est-il installé, et où est-il en retard ? ». Un projet
-est suivi dès qu’un élément y est installé ; **+ Suivre un projet…** en ajoute un autre et **Retirer de la
-liste** cesse de le suivre, sans rien supprimer dans le projet. Rien ne sort de cette liste tout seul : un
-dossier déplacé ou supprimé y reste, marqué « introuvable ».
-
-Pour chaque projet, l’application inspecte toutes les cibles qui contiennent un verrou (`.claude`, `.agents`,
-`.cursor`, `.github`, et les dossiers personnalisés déjà utilisés) et liste skills et agents avec leur état.
-**Tout mettre à jour** ne remplace que les copies simplement en retard ; une copie modifiée dans le projet ou
-en conflit garde ses propres actions (diff, remonter dans la bibliothèque, garder la bibliothèque). On agit
-sur un projet sans en faire le projet courant ; **Travailler dans ce projet** le fait explicitement.
-
-Dans le détail d’un skill ou d’un agent, **Installé dans** liste les projets qui en ont une copie, avec
-**Mettre à jour partout**. Après un enregistrement, la notification indique combien de projets sont en retard,
-et la liste signale par « ↻ n » les éléments en retard ailleurs que dans le projet courant. Plusieurs projets
-sont mis à jour en un seul lot : le dépôt distant n’est consulté qu’une fois, et tous les projets sont
-vérifiés avant la première copie.
-
-### Ouvrir une bibliothèque Git
-
-Dans la barre latérale, **Ouvrir / Cloner…** propose deux parcours :
-
-- **Dépôt local** : sélectionner la racine d’un dépôt Git déjà cloné (les worktrees sont également acceptés).
-- **Cloner un dépôt** : saisir l’URL, choisir un dossier parent et nommer le nouveau dossier à créer. Une destination déjà existante est refusée, même si elle est vide.
-
-Git doit être installé et accessible à l’application. Pour un dépôt privé, les accès Git
-(clé SSH ou gestionnaire d’identifiants HTTPS) doivent déjà être configurés sur la machine ;
-l’application ne demande pas de mot de passe dans un terminal.
-
-L’ouverture d’un dépôt charge ses skills et ses agents et remplace l’ancien chemin d’agents
-personnalisé. Le choix est enregistré pour le prochain lancement. Un échec de validation ou
-de clonage conserve la bibliothèque précédente. Les bibliothèques de dossiers configurées
-avant cette évolution restent lisibles au démarrage.
-
-### Publier les modifications Git
-
-Le bouton **Publier…** ouvre l’aperçu des changements enregistrés sur disque, y compris
-ceux effectués hors de l’application. Cocher les fichiers à inclure, consulter leurs différences,
-adapter le message de commit prérempli puis cliquer sur **Commit et push**. Un renommage
-apparaît comme une suppression et un ajout : sélectionner les deux pour le publier entièrement.
-Les modifications non enregistrées dans l’éditeur ne sont pas incluses ; un rappel est affiché.
-
-La publication utilise la branche courante et sa branche distante de suivi déjà configurée.
-Les autres fichiers préparés dans Git restent exclus du commit et conservent leur préparation.
-Les commits locaux déjà en attente sont indiqués, car ils seront également envoyés.
-L’aperçu n’altère pas la préparation existante ; un changement depuis l’aperçu impose de l’actualiser.
-
-Si le commit réussit mais que le push échoue, le commit reste local et **Envoyer les commits**
-permet de réessayer sans nouveau commit. Aucun push forcé n’est effectué. L’identité de commit,
-les hooks et la signature utilisent la configuration Git de la machine. Un commit refusé laisse
-les fichiers sélectionnés préparés dans Git et n’est pas suivi d’un push.
-
-Les branches sans suivi distant, HEAD détachée, opérations Git en cours, conflits et changements
-de sous-modules doivent être traités dans un outil Git externe. L’aperçu de publication utilise
-le dernier état distant connu localement.
-
-### Récupérer et vérifier avant installation
-
-**Récupérer…** vérifie la branche distante configurée et affiche les commits à récupérer,
-les commits locaux à publier et les fichiers modifiés. **Mettre à jour la bibliothèque** applique
-uniquement une avance rapide, sans fusion ni stash automatique. Git conserve les modifications
-locales compatibles et refuse la mise à jour si elles risquent d’être écrasées, y compris les fichiers
-ignorés. Une divergence ou une opération Git en cours doit être résolue dans un outil Git externe.
-Les modifications non enregistrées dans l’éditeur empêchent la mise à jour jusqu’à leur enregistrement.
-
-Chaque installation depuis l’application (unitaire, groupée, skill ou agent, réinstallation ou mise
-à jour depuis le tiroir « Installés ») ouvre le même contrôle :
-
-- Bibliothèque à jour avec le dépôt distant et rien à signaler : l’installation se fait directement, sans dialogue, et la notification précise si un brouillon non publié a été installé. Si quelque chose mérite votre attention (incompatibilité de harnais, modifications non enregistrées dans l’éditeur), le dialogue s’ouvre avec une seule action, **Installer dans le projet**.
-- Bibliothèque en retard : **Mettre à jour la bibliothèque puis installer** récupère la version distante, recharge les éléments choisis et les installe ; **Installer la version actuelle de la bibliothèque** reste possible.
-- Si le réseau ou les accès Git empêchent la vérification, **Installer sans vérification** reste un choix explicite.
-- Si la mise à jour échoue, aucune installation ne suit automatiquement.
-
-Les changements de source depuis le contrôle imposent une nouvelle vérification avant copie.
-Le verrou conserve l’état de la source à l’installation (version publiée, brouillon local, commit
-non publié ou fraîcheur non vérifiée), affiché dans le tiroir « Installés ». Les anciens verrous
-restent lisibles. Le hash de contenu continue de servir à détecter les écarts projet/bibliothèque.
-
-Côté CLI, `remote status`, `remote update` et `remote publish` appliquent les mêmes règles que
-l’application (suivi distant configuré, avance rapide uniquement, aucun push forcé). `install` reste
-une copie locale sans vérification de fraîcheur : lancer `remote status` avant si nécessaire. Remonter une copie projet vers la bibliothèque reste un enregistrement
-local ; sa publication Git est une action séparée.
-
-### Créer un skill ou un agent
-
-**+ Nouveau skill** (ou **+ Nouvel agent**) demande un identifiant, une description et, facultativement, une
-catégorie et des tags du référentiel. L’élément est créé à partir d’un modèle intégré, distinct pour les
-skills et les agents, à la structure courte : objectif, instructions, exemple d’utilisation. Il s’ouvre
-aussitôt dans l’éditeur. Rien n’est écrasé : un nom déjà pris est refusé, même par un dossier ou un fichier
-qui n’est pas un skill ou un agent. Le brouillon reste local jusqu’à **Publier…**. La commande CLI `new`
-utilise les mêmes modèles.
-
-### Raffiner un skill avec Claude
-
-**Raffiner…** (détail d’un skill) envoie le texte de `SKILL.md` à Claude avec une consigne libre, par exemple
-« clarifie les étapes et ajoute un exemple », puis affiche la proposition sous forme de différences.
-**Accepter** enregistre le fichier localement, sans commit ni push ; **Rejeter** ne touche à rien. Si le
-fichier a changé entre-temps, l’acceptation est refusée.
-
-- Fonction facultative : elle utilise la commande `claude` de Claude Code en mode non interactif (`claude -p`),
-  avec le modèle par défaut et l’authentification de votre installation. Si elle est introuvable ou non
-  connectée, un message l’explique. `UBER_SKILL_CLAUDE` permet d’indiquer un autre exécutable.
-- Claude s’exécute sans aucun outil, hors de la bibliothèque, et ne reçoit que `SKILL.md` : les scripts et
-  autres fichiers du skill ne sont pas analysés.
-- La proposition peut modifier le corps et la `description`. Le nom, les tags, la catégorie, les harnais et
-  toutes les autres clés du frontmatter sont verrouillés : s’ils reviennent modifiés, ils sont rétablis et
-  l’application le signale.
-- Ni le raffinement ni le lint ne valident le comportement d’un skill : essayez-le dans un projet.
-
-En ligne de commande : `uber-skill refine <id> -m "consigne"` affiche le diff, `--apply` l’enregistre.
-
-### Tags et catégories
-
-**Tags et catégories…** (barre latérale, ou ⚙ › Bibliothèque) administre le référentiel : ajouter une
-valeur, la renommer partout où elle est utilisée (un nom déjà existant fusionne les deux valeurs), la
-supprimer. Supprimer une valeur encore utilisée demande un choix explicite : la remplacer par une autre ou
-la retirer des éléments concernés. Les valeurs inconnues, trouvées dans des skills ou agents mais absentes
-du référentiel, peuvent être ajoutées au référentiel ou remplacées par une valeur autorisée ; tant
-qu’aucun choix n’est fait, elles sont conservées telles quelles.
-
-Dès que le référentiel existe, l’éditeur de métadonnées et le formulaire de création proposent des
-sélecteurs de valeurs autorisées ; les valeurs inconnues déjà présentes sur un élément restent visibles et
-peuvent être retirées. Les renommages et remplacements ne réécrivent que les lignes `tags` et `category`
-du frontmatter lorsque c’est possible, pour garder des différences Git lisibles. Tout est enregistré sur
-disque ; la publication reste l’action **Publier…**. Les opérations qui réécrivent des skills ou agents
-sont désactivées tant que l’éditeur contient des modifications non enregistrées.
-
-## Erreurs et libellés
-
-Le `core` ne produit aucun texte destiné à l’utilisateur : une erreur porte un code stable
-(`git-stale`, `blocked.diverged`, `input.clone-url`…), un message anglais pour les logs et le CLI, et des
-détails jamais traduits (chemin, identifiant, sortie de Git). L’application traduit les codes dans
-`apps/desktop/src/lib/errors.ts` ; un test du `core` échoue si un code n’y a pas de libellé. Les constats du lint et les avertissements de scan suivent la même règle (`lint.ts`). Dans l’onglet Lint, **Corriger** applique la correction d’un lien cassé quand le fichier existe ailleurs dans le skill, et **Ajouter au référentiel** accepte un tag ou une catégorie inconnus.
-
-## Tests
-
-```sh
-cargo test                                    # core, sur de vrais dépôts Git temporaires
-cd apps/desktop && pnpm check && pnpm test    # types, puis store et dialogues Git (vitest, passerelle Tauri simulée)
-```
-
-`cargo fmt --all` avant de commiter (largeur 120, voir `rustfmt.toml`).
-
-Note macOS : la licence Xcode n'étant pas acceptée sur cette machine, `.cargo/config.toml` force
-`DEVELOPER_DIR` sur les Command Line Tools.
+MIT.
