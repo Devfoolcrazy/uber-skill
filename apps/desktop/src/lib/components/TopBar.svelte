@@ -1,11 +1,13 @@
 <script lang="ts">
   import { open } from "@tauri-apps/plugin-dialog";
-  import { api, KIND_LABEL, TARGETS, targetDirFor, targetKey, targetSupports, type ItemKind } from "$lib/api";
+  import { api, GLOBAL_TARGET_KINDS, KIND_LABEL, TARGETS, targetDirFor, targetKey, targetSupports, type ItemKind } from "$lib/api";
 
   const KINDS: ItemKind[] = ["skill", "agent"];
   import { store } from "$lib/store.svelte";
+  import GuideDialog from "./GuideDialog.svelte";
 
   let settingsOpen = $state(false);
+  let guideOpen = $state(false);
   let editorDraft = $state("");
 
   async function pickProject() {
@@ -55,16 +57,22 @@
 
   <div class="project">
     <button class="project-btn" class:empty={!store.projectPath} onclick={() => (store.pickerOpen = !store.pickerOpen)} title={store.projectPath ?? "Aucun projet"}>
-      <span class="label">Projet</span>
-      <span class="name">{store.projectName ?? "Choisir un projet…"}</span>
+      <span class="label">{store.isGlobal ? "Cible" : "Projet"}</span>
+      <span class="name">{store.isGlobal ? "🌐 Global" : store.projectName ?? "Choisir un projet…"}</span>
       <span class="caret">▾</span>
     </button>
     {#if store.pickerOpen}
       <div class="picker">
         <button class="item" onclick={pickProject}>Choisir un dossier…</button>
+        {#if store.globalRoot}
+          <button class="item" class:active={store.isGlobal} title="Vos dossiers personnels : disponible dans tous les projets" onclick={() => { store.pickerOpen = false; store.setProject(store.globalRoot, GLOBAL_TARGET_KINDS.includes(store.target.kind) ? store.target : { kind: "claude-code" }); }}>
+            <span>🌐 Global (cette machine)</span>
+            <span class="muted">~/.claude · ~/.agents</span>
+          </button>
+        {/if}
         {#if store.config?.recent_projects.length}
           <div class="sep">Récents</div>
-          {#each store.config.recent_projects as p (p.path)}
+          {#each store.config.recent_projects.filter((p) => p.path !== store.globalRoot) as p (p.path)}
             <button class="item recent" class:active={p.path === store.projectPath} onclick={() => { store.pickerOpen = false; store.setProject(p.path, p.target); }} title={p.path}>
               <span>{p.path.split("/").filter(Boolean).pop()}</span>
               <span class="muted">{p.path.split("/").slice(-3, -1).join("/")}</span>
@@ -81,7 +89,7 @@
 
   {#if store.projectPath}
     <select value={targetKey(store.target)} onchange={changeTarget} title="Dossier cible : {targetDirFor(store.kind, store.target) ?? 'non géré'}" class:bad={!store.targetOk}>
-      {#each TARGETS as t}
+      {#each TARGETS.filter((t) => !store.isGlobal || GLOBAL_TARGET_KINDS.includes(t.target.kind)) as t}
         <option value={targetKey(t.target)} disabled={!targetSupports(store.kind, t.target)}>{t.label}{targetSupports(store.kind, t.target) ? "" : " (pas d'agents)"}</option>
       {/each}
     </select>
@@ -94,6 +102,7 @@
     </button>
   {/if}
 
+  <button class="small" title="Mode d’emploi" aria-label="Mode d’emploi" onclick={() => (guideOpen = true)}>?</button>
   <div class="settings-wrap">
     <button class="small settings-btn" title="Réglages" onclick={() => { settingsOpen = !settingsOpen; editorDraft = store.config?.editor_command ?? ""; }}>⚙</button>
     {#if settingsOpen}
@@ -109,6 +118,10 @@
     {/if}
   </div>
 </header>
+
+{#if guideOpen}
+  <GuideDialog onclose={() => (guideOpen = false)} />
+{/if}
 
 <style>
   .late {

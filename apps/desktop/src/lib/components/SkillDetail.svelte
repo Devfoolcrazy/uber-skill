@@ -7,6 +7,7 @@
   import { issueText, SEVERITY_LABEL } from "$lib/lint";
   import { store, DRIFT_LABEL } from "$lib/store.svelte";
   import GitBadge from "./GitBadge.svelte";
+  import GlobalBadge from "./GlobalBadge.svelte";
   import InstalledIn from "./InstalledIn.svelte";
   import MetaFields from "./MetaFields.svelte";
   import RefineDialog from "./RefineDialog.svelte";
@@ -216,7 +217,7 @@
 
 {#if !skill}
   <div class="detail empty muted">
-    {#if store.library}Sélectionne un {store.kind === "skill" ? "skill" : "agent"} dans la liste.{:else}Choisis d'abord un dossier de bibliothèque.{/if}
+    {#if store.library}Sélectionne un {store.kind === "skill" ? "skill" : "agent"} dans la liste.{:else}Ouvrez d’abord une bibliothèque (« Ouvrir / Cloner… »). Le bouton « ? » en haut à droite explique l’application.{/if}
   </div>
 {:else}
   <div class="detail">
@@ -225,11 +226,12 @@
         <h2 class="selectable">{skill.id}</h2>
         {#if skill.category}<span class="chip cat" class:unknown={!store.isKnown("category", skill.category)} title={store.isKnown("category", skill.category) ? undefined : "Catégorie absente du référentiel"}>{skill.category}</span>{/if}
         <GitBadge state={store.gitStateOf(skill.id)} full />
+        {#if !store.isGlobal}<GlobalBadge copy={store.globalStateOf(skill.id)} full />{/if}
       </div>
       <div class="row actions">
         {#if store.projectPath}
           {#if !installed}
-            <button class="small primary" disabled={!store.targetOk} title={store.targetOk ? "" : "Cette cible ne gère pas les agents"} onclick={installHere}>Installer dans {store.projectName}</button>
+            <button class="small primary" disabled={!store.targetOk} title={store.targetOk ? "" : "Cette cible ne gère pas les agents"} onclick={installHere}>{store.isGlobal ? "Installer globalement" : `Installer dans ${store.projectName}`}</button>
           {:else}
             {#if installed.state === "library-updated"}
               <button class="small primary" disabled={!store.targetOk} title="La bibliothèque contient une version plus récente que la copie installée dans ce projet" onclick={installHere}>Mettre à jour la copie du projet</button>
@@ -237,7 +239,7 @@
             <button class="small" onclick={() => (store.drawerOpen = true)} title={`${DRIFT_LABEL[installed.state]} · voir les éléments installés dans ce projet`}>
               <span class="dot {installed.state}"></span> Installés
             </button>
-            <button class="small" title="Supprime la copie installée dans ce projet ; l’élément reste dans la bibliothèque" onclick={() => store.uninstall(skill!.id)}>Retirer du projet…</button>
+            <button class="small" title="Supprime la copie installée dans ce projet ; l’élément reste dans la bibliothèque" onclick={() => store.uninstall(skill!.id)}>{store.isGlobal ? "Retirer…" : "Retirer du projet…"}</button>
           {/if}
         {/if}
         <button class="small" onclick={() => api.openInEditor(skill!.path).catch(store.fail)}>Ouvrir dans l'éditeur</button>

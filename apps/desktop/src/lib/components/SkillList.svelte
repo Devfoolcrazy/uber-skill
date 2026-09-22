@@ -1,6 +1,7 @@
 <script lang="ts">
   import { store, DRIFT_LABEL } from "$lib/store.svelte";
   import GitBadge from "./GitBadge.svelte";
+  import GlobalBadge from "./GlobalBadge.svelte";
   import NewSkillForm from "./NewSkillForm.svelte";
 
   let showNew = $state(false);
@@ -38,6 +39,7 @@
             <span class="name">{s.id}</span>
             {#if st}<span class="dot {st.state}" title={DRIFT_LABEL[st.state]}></span>{/if}
             <GitBadge state={store.gitStateOf(s.id)} />
+            {#if !store.isGlobal}<GlobalBadge copy={store.globalStateOf(s.id)} />{/if}
             {#if store.behindElsewhere(s.id) > 0}<span class="elsewhere" title="Copies en retard dans d’autres projets suivis">↻{store.behindElsewhere(s.id)}</span>{/if}
             <span class="spacer"></span>
             {#if s.category}<span class="chip cat">{s.category}</span>{/if}

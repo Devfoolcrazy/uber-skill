@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { api, targetKey, targetLabel, type FileDiff, type InstalledSkill, type InstallRequest, type ProjectOverview, type TargetInstall } from "$lib/api";
+  import { api, targetKey, targetLabel, type FileDiff, type InstalledSkill, type InstallRequest, type ItemKind, type ProjectOverview, type TargetInstall } from "$lib/api";
   import { store, DRIFT_LABEL } from "$lib/store.svelte";
 
   let selectedPath = $state<string | null>(null);
@@ -60,6 +60,18 @@
     if (done) await store.refreshAfterGit();
   }
 
+  const inLibrary = (kind: ItemKind, id: string) => !!store.libraries[kind]?.skills.some((s) => s.id === id);
+
+  /// Follow a copy the app did not install: link it to its library twin, or import it first.
+  async function adopt(project: ProjectOverview, install: TargetInstall, item: InstalledSkill, importFirst: boolean) {
+    const done = await store.run(importFirst ? `${item.id} importé dans la bibliothèque` : `${item.id} lié à la bibliothèque`, async () => {
+      if (importFirst) await api.importSkill(install.kind, item.path, null);
+      await api.adoptSkill(install.kind, item.id, project.path, install.target);
+      return true;
+    });
+    if (done) await store.refreshAfterGit();
+  }
+
   const update = (project: ProjectOverview, install: TargetInstall, item: InstalledSkill) =>
     store.requestInstalls([{ project: project.path, kind: install.kind, target: install.target, ids: [item.id] }]);
 </script>
@@ -71,7 +83,7 @@
       {#each store.projects as p (p.path)}
         <li>
           <button class="project" class:active={selected?.path === p.path} onclick={() => (selectedPath = p.path)} title={p.path}>
-            <span class="name">{p.name}</span>
+            <span class="name">{p.global ? "🌐 Global" : p.name}</span>
             {#if !p.exists}
               <span class="missing">introuvable</span>
             {:else if p.behind > 0}
@@ -94,18 +106,20 @@
     {:else}
       <header>
         <div class="row">
-          <h2 class="selectable">{selected.name}</h2>
+          <h2 class="selectable">{selected.global ? "🌐 Global" : selected.name}</h2>
           {#if selected.path === store.projectPath}<span class="chip">projet courant</span>{/if}
           <span class="spacer"></span>
           {#if selected.exists && selected.behind > 0}
             <button class="small primary" onclick={() => store.requestInstalls(behindRequests(selected))}>Tout mettre à jour ({selected.behind})</button>
           {/if}
           {#if selected.exists && selected.path !== store.projectPath}
-            <button class="small" title="En faire le projet courant et revenir à la bibliothèque" onclick={() => workIn(selected)}>Travailler dans ce projet</button>
+            <button class="small" title={selected.global ? "Installer globalement depuis la bibliothèque" : "En faire le projet courant et revenir à la bibliothèque"} onclick={() => workIn(selected)}>{selected.global ? "Installer globalement…" : "Travailler dans ce projet"}</button>
           {/if}
-          <button class="small" title="Ne plus suivre ce projet. Rien n’est supprimé dans le projet." onclick={() => unfollow(selected)}>Retirer de la liste</button>
+          {#if !selected.global}
+            <button class="small" title="Ne plus suivre ce projet. Rien n’est supprimé dans le projet." onclick={() => unfollow(selected)}>Retirer de la liste</button>
+          {/if}
         </div>
-        <p class="muted selectable">{selected.path}</p>
+        <p class="muted selectable">{selected.global ? "Vos dossiers personnels (~/.claude, ~/.agents) : ce qui y est installé est disponible dans tous les projets, pour Claude Code et Codex." : selected.path}</p>
         {#if selected.exists}
           <p class="muted">{total} élément(s) installé(s){selected.behind > 0 ? ` · ${selected.behind} en retard sur la bibliothèque` : total > 0 ? " · tout est à jour ou demande votre attention" : ""}</p>
         {/if}
@@ -114,7 +128,7 @@
       {#if !selected.exists}
         <p class="warning">Ce dossier est introuvable : le projet a peut-être été déplacé ou supprimé. Il reste dans la liste tant que vous ne le retirez pas.</p>
       {:else if selected.installs.length === 0}
-        <p class="muted">Rien n’a été installé dans ce projet depuis l’application.</p>
+        <p class="muted">{selected.global ? "Rien n’est installé globalement." : "Rien n’a été installé dans ce projet depuis l’application."}</p>
       {/if}
 
       {#each selected.installs as install (targetKey(install.target) + install.kind)}
@@ -132,13 +146,20 @@
               {#if item.state === "project-modified"}
                 <button class="small" aria-label={`Remonter ${item.id} dans la bibliothèque`} onclick={() => pushToLibrary(selected, install, item)}>Remonter dans la bibliothèque</button>
               {/if}
+              {#if item.state === "untracked"}
+                {#if inLibrary(install.kind, item.id)}
+                  <button class="small" aria-label={`Lier ${item.id} à la bibliothèque`} title="Cette copie existe déjà dans la bibliothèque : la suivre sans la modifier" onclick={() => adopt(selected, install, item, false)}>Lier à la bibliothèque</button>
+                {:else}
+                  <button class="small" aria-label={`Importer ${item.id} dans la bibliothèque`} title="Copier cet élément dans la bibliothèque, puis suivre cette copie" onclick={() => adopt(selected, install, item, true)}>Importer dans la bibliothèque</button>
+                {/if}
+              {/if}
               {#if item.state === "conflict"}
                 <button class="small" aria-label={`Garder la bibliothèque pour ${item.id}`} onclick={() => update(selected, install, item)}>Garder la bibliothèque</button>
               {/if}
               {#if ["library-updated", "project-modified", "conflict"].includes(item.state)}
                 <button class="small" aria-label={`Diff de ${item.id}`} onclick={() => showDiff(selected, install, item)}>Diff</button>
               {/if}
-              <button class="small" aria-label={`Retirer ${item.id} du projet`} onclick={() => store.uninstall(item.id, { project: selected.path, target: install.target, kind: install.kind, state: item.state })}>Retirer du projet…</button>
+              <button class="small" aria-label={`Retirer ${item.id} du projet`} onclick={() => store.uninstall(item.id, { project: selected.path, target: install.target, kind: install.kind, state: item.state })}>{selected.global ? "Retirer…" : "Retirer du projet…"}</button>
             </li>
           {/each}
         </ul>

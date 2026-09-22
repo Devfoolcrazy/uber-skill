@@ -16,7 +16,7 @@ export type Target =
 
 export const TARGETS: { target: Target; label: string; dirs: Record<ItemKind, string | null> }[] = [
   { target: { kind: "claude-code" }, label: "Claude Code", dirs: { skill: ".claude/skills", agent: ".claude/agents" } },
-  { target: { kind: "agents" }, label: "Agents (Codex, Amp, Copilot CLI)", dirs: { skill: ".agents/skills", agent: null } },
+  { target: { kind: "agents" }, label: "Codex (.agents)", dirs: { skill: ".agents/skills", agent: null } },
   { target: { kind: "cursor" }, label: "Cursor", dirs: { skill: ".cursor/skills", agent: null } },
   { target: { kind: "copilot" }, label: "GitHub Copilot", dirs: { skill: ".github/skills", agent: null } },
 ];
@@ -184,7 +184,9 @@ export interface BatchPlan {
   jobs: { project: string; plan: InstallationPlan }[];
 }
 export interface TargetInstall { target: Target; kind: ItemKind; items: InstalledSkill[] }
-export interface ProjectOverview { path: string; name: string; exists: boolean; installs: TargetInstall[]; behind: number }
+export interface ProjectOverview { path: string; name: string; exists: boolean; global: boolean; installs: TargetInstall[]; behind: number }
+/// Harnesses with per-user folders the app manages (Claude Code, Codex).
+export const GLOBAL_TARGET_KINDS: Target["kind"][] = ["claude-code", "agents"];
 export const targetLabel = (t: Target) => TARGETS.find((x) => x.target.kind === t.kind)?.label ?? (t.kind === "custom" ? t.path : t.kind);
 
 export const api = {
@@ -197,6 +199,7 @@ export const api = {
   checkLibraryGit: () => invoke<GitSyncStatus>("check_library_git"),
   updateLibraryGit: (snapshot: string) => invoke<GitSyncStatus>("update_library_git", { snapshot }),
   prepareInstall: (requests: InstallRequest[]) => invoke<BatchPlan>("prepare_install", { requests }),
+  globalRoot: () => invoke<string | null>("global_root"),
   projectsOverview: () => invoke<ProjectOverview[]>("projects_overview"),
   trackProject: (path: string) => invoke<Config>("track_project", { path }),
   untrackProject: (path: string) => invoke<Config>("untrack_project", { path }),

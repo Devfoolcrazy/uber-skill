@@ -51,7 +51,7 @@ impl Target {
     pub fn label(&self) -> String {
         match self {
             Target::ClaudeCode => "Claude Code".into(),
-            Target::Agents => "Agents (Codex, Amp, Copilot CLI)".into(),
+            Target::Agents => "Codex (.agents)".into(),
             Target::Cursor => "Cursor".into(),
             Target::Copilot => "GitHub Copilot".into(),
             Target::Custom(p) => format!("Custom ({})", p.display()),

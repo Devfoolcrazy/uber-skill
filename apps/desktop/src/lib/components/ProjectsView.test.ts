@@ -11,15 +11,15 @@ const claude = { kind: "claude-code" } as const;
 const cursor = { kind: "cursor" } as const;
 const projects: ProjectOverview[] = [
   {
-    path: "/work/game", name: "game", exists: true, behind: 2,
+    path: "/work/game", name: "game", exists: true, global: false, behind: 2,
     installs: [
       { target: claude, kind: "skill", items: [item("one", "library-updated"), item("two", "project-modified")] },
       { target: claude, kind: "agent", items: [item("reviewer", "library-updated")] },
       { target: cursor, kind: "skill", items: [item("three", "up-to-date")] },
     ],
   },
-  { path: "/work/site", name: "site", exists: true, behind: 1, installs: [{ target: claude, kind: "skill", items: [item("one", "library-updated")] }] },
-  { path: "/work/gone", name: "gone", exists: false, behind: 0, installs: [] },
+  { path: "/work/site", name: "site", exists: true, global: false, behind: 1, installs: [{ target: claude, kind: "skill", items: [item("one", "library-updated")] }] },
+  { path: "/work/gone", name: "gone", exists: false, global: false, behind: 0, installs: [] },
 ];
 
 beforeEach(() => {
@@ -77,6 +77,29 @@ describe("followed projects", () => {
 
     await fireEvent.click(screen.getByRole("button", { name: "+ Suivre un projet…" }));
     await waitFor(() => expect(calls("track_project")).toEqual([{ path: "/work/new" }]));
+  });
+
+  it("puts the global install first, whole, with adopt actions and no way to unfollow it", async () => {
+    const global: ProjectOverview = {
+      path: "/Users/demo", name: "Global", exists: true, global: true, behind: 0,
+      installs: [
+        { target: claude, kind: "skill", items: [item("one", "up-to-date"), item("handmade", "untracked")] },
+        { target: { kind: "agents" }, kind: "skill", items: [item("two", "untracked")] },
+      ],
+    };
+    store.globalRoot = "/Users/demo";
+    store.libraries = { skill: { kind: "skill", root: "/lib", skills: [skill("one"), skill("two")], warnings: [], tags: [], categories: [] }, agent: null };
+    store.projects = [global, ...projects];
+    const { calls } = bridge({ projects_overview: () => store.projects, adopt_skill: () => null, scan_library: () => store.libraries.skill, project_status: () => [], get_registry: () => null, library_git_states: () => ({}) });
+    render(ProjectsView);
+
+    await fireEvent.click(screen.getByRole("button", { name: /Global/ }));
+    expect(screen.getByText(/Vos dossiers personnels/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retirer de la liste" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Importer handmade dans la bibliothèque" })).toBeTruthy();
+    await fireEvent.click(screen.getByRole("button", { name: "Lier two à la bibliothèque" }));
+    await waitFor(() => expect(calls("adopt_skill")).toEqual([{ kind: "skill", id: "two", project: "/Users/demo", target: { kind: "agents" } }]));
+    store.globalRoot = null;
   });
 
   it("works on another project's copy without making it the current project", async () => {

@@ -117,6 +117,23 @@ envoyé, **↓** version plus récente sur le dépôt distant. Le bouton **Publi
 à publier. Ces états sont calculés à partir des données Git locales, sans accès réseau : **↓** reflète donc
 la dernière récupération (**Récupérer…** ou le contrôle avant installation).
 
+### Installation globale
+
+Le sélecteur de projet propose **🌐 Global (cette machine)** : les copies vont dans vos dossiers personnels
+(`~/.claude/skills`, `~/.claude/agents` pour Claude Code ; `~/.agents/skills` pour Codex) et sont disponibles
+dans tous les projets. Tout le reste fonctionne comme pour un projet : verrou, état de dérive, mise à jour,
+retrait. « Global » est toujours en tête de l’onglet Projets et compte dans « Installé dans » et
+« Mettre à jour partout ». Les skills déjà présents dans ces dossiers, installés à la main, apparaissent
+« non suivis » avec « Lier à la bibliothèque » ou « Importer dans la bibliothèque » ; ils ne sont jamais
+modifiés sans votre choix. Dans la liste, un globe 🌐 signale une copie globale, coloré selon son état.
+En ligne de commande : `uber-skill install <id> -p ~`.
+
+### Mode d’emploi embarqué
+
+Le bouton **?** de la barre du haut ouvre un guide en français, `apps/desktop/src/lib/guide.md`, embarqué
+dans l’application. Il décrit les concepts, les indicateurs et les parcours ; à tenir à jour avec les
+fonctionnalités.
+
 ### Projets suivis
 
 L’onglet **Projets** répond à la question « où ce skill est-il installé, et où est-il en retard ? ». Un projet

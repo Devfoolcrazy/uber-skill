@@ -215,11 +215,20 @@ Vérifications effectuées : suite Rust complète (55 tests), `pnpm check`, 59 t
 
 Reste possible plus tard : « Tout mettre à jour » pour l’ensemble des projets d’un coup, tri et recherche dans la liste des projets.
 
-### 2. Installation globale (`~/.claude/skills`)
+### 2. Installation globale : implémentée, en attente du test utilisateur
 
-- Objectif : installer un skill ou un agent pour l’utilisateur, hors de tout projet.
-- Existant : toute la mécanique d’installation, de verrou et de dérive ; il manque une cible dont la racine est le dossier personnel.
-- À décider : emplacement du verrou dans `~/.claude` ; quelles cibles ont un équivalent global (Claude Code oui ; Codex, Cursor, Copilot à vérifier) ; présentation dans l’interface (un « projet » spécial ou une entrée à part) ; cohabitation avec des skills globaux installés à la main (état « non suivi »).
+Décisions de l’utilisateur (22 septembre 2026) : harnais globaux limités à Claude Code et Codex, ceux réellement utilisés ; marqueur globe 🌐 dans les listes, coloré selon l’état de la copie globale ; mode d’emploi embarqué dans l’application.
+
+Réalisé : le dossier personnel est un projet spécial « Global », toujours en tête de l’onglet Projets, scanné sur `~/.claude/skills`, `~/.claude/agents` et `~/.agents/skills` même sans verrou (les éléments installés à la main apparaissent « non suivis », avec « Lier » ou « Importer ») ; entrée « 🌐 Global (cette machine) » dans le sélecteur de projet, cibles limitées à Claude Code et Codex dans ce cas ; globe dans la liste, l’en-tête du détail et « Installé dans » ; libellé de la cible `.agents` renommé « Codex » ; guide embarqué derrière le bouton « ? » (`apps/desktop/src/lib/guide.md`).
+
+Vérifications effectuées : suite Rust complète (56 tests), `pnpm check`, 61 tests d’interface, contrôle visuel du frontend compilé dans un navigateur. Non essayé dans l’application réelle.
+
+À tester :
+- Sélecteur de projet › « Global » : vos skills existants dans `~/.claude/skills` (dont le symlink `book-to-skill`) et `~/.agents/skills` doivent apparaître « non suivis » ; essayer « Lier » sur un élément présent dans la bibliothèque et « Importer » sur un autre.
+- Installer un skill globalement, vérifier `~/.claude/skills/<id>` et le verrou, puis le globe vert dans la liste ; modifier le skill : le globe passe orange, « Installé dans » liste « Global ».
+- Cible Codex en global : installer dans `~/.agents/skills` et vérifier que Codex le voit.
+- « Retirer… » depuis Global : la confirmation doit dire « Global », pas le nom de votre dossier personnel.
+- Bouton « ? » : lire le guide et signaler ce qui manque ou ce qui est faux.
 
 ### 3. Essayer un skill
 

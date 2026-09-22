@@ -397,10 +397,12 @@ async fn install_skills(state: State<'_, AppState>, plan: git::installation::Bat
         .await
         .map_err(err)?
         .map_err(err)?;
-    // Installing somewhere is what makes a project worth following.
+    // Installing somewhere is what makes a project worth following; the home folder is not a project.
+    let home = projects::global_root();
     let mut cfg = state.config.lock().map_err(err)?;
     if projects
         .iter()
+        .filter(|p| Some(*p) != home.as_ref())
         .fold(false, |changed, p| cfg.track_project(p) || changed)
     {
         cfg.save().map_err(err)?;
@@ -416,6 +418,12 @@ async fn projects_overview(state: State<'_, AppState>) -> CmdResult<Vec<projects
         .await
         .map_err(err)?
         .map_err(err)
+}
+
+/// Where global installs go: the user's home folder.
+#[tauri::command]
+fn global_root() -> Option<PathBuf> {
+    projects::global_root()
 }
 
 #[tauri::command]
@@ -588,6 +596,7 @@ pub fn run() {
             project_status,
             install_skills,
             projects_overview,
+            global_root,
             track_project,
             untrack_project,
             uninstall_skill,

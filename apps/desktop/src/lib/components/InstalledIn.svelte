@@ -28,7 +28,7 @@
       {#each copies as c (c.project.path + targetKey(c.target))}
         <li>
           <span class="dot {c.item.state}"></span>
-          <button class="link" title={c.project.path} onclick={() => (store.view = "projects")}>{c.project.name}</button>
+          <button class="link" title={c.project.global ? "Vos dossiers personnels : disponible dans tous les projets" : c.project.path} onclick={() => (store.view = "projects")}>{c.project.global ? "🌐 Global" : c.project.name}</button>
           {#if c.project.path === store.projectPath}<span class="chip">projet courant</span>{/if}
           {#if severalTargets}<span class="muted">{targetLabel(c.target)}</span>{/if}
           <span class="muted">{DRIFT_LABEL[c.item.state]}</span>

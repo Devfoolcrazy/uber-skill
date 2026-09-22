@@ -19,7 +19,7 @@ import { errorText } from "./errors";
 
 export const DRIFT_LABEL: Record<string, string> = {
   "up-to-date": "À jour",
-  "library-updated": "Copie du projet en retard sur la bibliothèque",
+  "library-updated": "Copie en retard sur la bibliothèque",
   "project-modified": "Modifié dans le projet",
   conflict: "Conflit",
   untracked: "Non suivi",
@@ -54,6 +54,21 @@ class AppStore {
   gitDialog = $state<{ install?: InstallRequest[] } | null>(null);
   /// Main area: the library (skills or agents), or the followed projects.
   view = $state<"library" | "projects">("library");
+  /// The user's home folder: the root of global installs (`~/.claude`, `~/.agents`).
+  globalRoot = $state<string | null>(null);
+
+  get isGlobal(): boolean {
+    return !!this.projectPath && this.projectPath === this.globalRoot;
+  }
+
+  /// State of the copy installed globally for the current target, if any.
+  globalStateOf(id: string, kind: ItemKind = this.kind): InstalledSkill | undefined {
+    return this.projects
+      .find((p) => p.global)
+      ?.installs.find((i) => i.kind === kind && i.target.kind === this.target.kind)
+      ?.items.find((item) => item.id === id);
+  }
+
   /// Followed projects with what each has installed, across all their targets.
   projects = $state<ProjectOverview[]>([]);
 
@@ -206,6 +221,7 @@ class AppStore {
   }
 
   get projectName(): string | null {
+    if (this.isGlobal) return "Global";
     return this.projectPath ? this.projectPath.split("/").filter(Boolean).pop() ?? this.projectPath : null;
   }
 
@@ -243,6 +259,7 @@ class AppStore {
   async init() {
     await this.run(null, async () => {
       this.config = await api.getConfig();
+      this.globalRoot = await api.globalRoot().catch(() => null);
       if (this.config.library_path) {
         await this.refreshLibrary("skill");
         await this.refreshLibrary("agent").catch(this.fail.bind(this));
@@ -359,7 +376,7 @@ class AppStore {
   async uninstall(id: string, where?: { project: string; target: Target; kind: ItemKind; state: string }): Promise<boolean> {
     const project = where?.project ?? this.projectPath;
     if (!project) return false;
-    const name = project.split("/").filter(Boolean).pop() ?? project;
+    const name = project === this.globalRoot ? "Global" : project.split("/").filter(Boolean).pop() ?? project;
     const edited = ["project-modified", "conflict"].includes(where?.state ?? this.statusOf(id)?.state ?? "");
     const ok = await confirm(
       `La copie installée dans ${name} sera supprimée. ${id} reste dans la bibliothèque.` +
