@@ -215,7 +215,7 @@ Vérifications effectuées : suite Rust complète (55 tests), `pnpm check`, 59 t
 
 Reste possible plus tard : « Tout mettre à jour » pour l’ensemble des projets d’un coup, tri et recherche dans la liste des projets.
 
-### 2. Installation globale : implémentée, en attente du test utilisateur
+### 2. Installation globale : implémentée et validée par l’utilisateur
 
 Décisions de l’utilisateur (22 septembre 2026) : harnais globaux limités à Claude Code et Codex, ceux réellement utilisés ; marqueur globe 🌐 dans les listes, coloré selon l’état de la copie globale ; mode d’emploi embarqué dans l’application.
 

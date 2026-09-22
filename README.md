@@ -74,8 +74,8 @@ Uber Skill part d'un principe simple : **la bibliothèque est un dépôt Git, ch
 Prérequis : [Rust](https://rustup.rs), [pnpm](https://pnpm.io), Git. Pour « Raffiner… », la commande `claude` de Claude Code, connectée.
 
 ```sh
-git clone https://github.com/<vous>/uber_skill.git
-cd uber_skill/apps/desktop
+git clone https://github.com/devfoolcrazy/uber-skill.git
+cd uber-skill/apps/desktop
 pnpm install
 pnpm tauri dev          # développement
 pnpm tauri build        # target/release/bundle/macos/Uber Skill.app et .dmg
