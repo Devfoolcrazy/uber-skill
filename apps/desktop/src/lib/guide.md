@@ -51,7 +51,8 @@ L'onglet « Projets » répond à « où ce skill est-il installé, et où est-i
 - **+ Nouveau skill / agent** crée un brouillon à partir d'un modèle court (objectif, instructions, exemple) et l'ouvre dans l'éditeur.
 - **Tags & catégorie** : les valeurs viennent du référentiel `uber-skill.yaml`, versionné avec la bibliothèque et administré dans « Tags et catégories… ». Une valeur inconnue n'est jamais refusée, seulement signalée.
 - **Harnais** : un skill est universel par défaut. S'il dépend d'un outil (Claude Code, Codex…), déclarez-le dans `metadata.hosts` ; l'application avertit avant une installation vers une cible qui ne correspond pas.
-- **Lint** : nom, description, corps, liens, tags. « Corriger » répare un lien cassé quand le fichier existe ailleurs dans le skill.
+- **Index** : `INDEX.md` à la racine de la bibliothèque résume chaque skill et agent en une ligne, pour qu'un modèle ou un visiteur du dépôt trouve un élément sans tout ouvrir. L'application le régénère toute seule après chaque modification et avant « Publier… » ; ne le modifiez pas à la main.
+- **Lint** : nom, description, corps, liens, tags, fraîcheur de l'index. « Corriger » répare un lien cassé quand le fichier existe ailleurs dans le skill.
 - **Raffiner…** envoie le `SKILL.md` à Claude (`claude -p`, sans outil) avec votre consigne, et montre un diff à accepter ou rejeter. Le nom, les tags et les autres clés du frontmatter sont verrouillés. Ni le lint ni le raffinement ne garantissent le comportement du skill : essayez-le dans un projet.
 
 ## Supprimer
@@ -61,4 +62,4 @@ L'onglet « Projets » répond à « où ce skill est-il installé, et où est-i
 
 ## Ce qui reste hors de l'application
 
-Les branches, fusions et conflits Git se règlent dans un outil Git externe ; l'application ne fait que des avances rapides et des pushs sans force. La commande `claude` doit être installée et connectée pour « Raffiner… ». Le CLI `uber-skill` offre les mêmes opérations en ligne de commande (`list`, `install`, `status`, `remote`, `registry`, `refine`, `lint`) ; `install -p ~` installe globalement.
+Les branches, fusions et conflits Git se règlent dans un outil Git externe ; l'application ne fait que des avances rapides et des pushs sans force. La commande `claude` doit être installée et connectée pour « Raffiner… ». Le CLI `uber-skill` offre les mêmes opérations en ligne de commande (`list`, `install`, `status`, `remote`, `registry`, `refine`, `lint`, `index`) ; `install -p ~` installe globalement.

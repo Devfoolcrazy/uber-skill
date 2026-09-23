@@ -6,12 +6,12 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use uber_skill_core::projects;
-use uber_skill_core::refine;
 use uber_skill_core::registry::{self, Facet, OnUsed};
 use uber_skill_core::{
     git, install, lint, search, Config, Error, ErrorPayload, FileDiff, InstalledSkill, Issue, ItemKind, Library,
     LockEntry, Query, Registry, RegistryView, Skill, Target,
 };
+use uber_skill_core::{index, refine};
 
 struct AppState {
     config: Mutex<Config>,
@@ -55,6 +55,13 @@ impl IntoPayload for std::io::Error {
 
 fn err<E: IntoPayload>(e: E) -> ErrorPayload {
     e.into_payload()
+}
+
+/// Keep INDEX.md in step with the library after a command changed it.
+fn refresh_index(state: &AppState) -> CmdResult<()> {
+    let cfg = state.config.lock().map_err(err)?.clone();
+    index::update(&cfg).map_err(err)?;
+    Ok(())
 }
 
 fn open_library(state: &AppState, kind: ItemKind) -> CmdResult<Library> {
@@ -112,11 +119,15 @@ async fn clone_library(state: State<'_, AppState>, url: String, parent: PathBuf,
 
 #[tauri::command]
 async fn git_publication_preview(state: State<'_, AppState>) -> CmdResult<git::publication::Preview> {
-    let path = state.config.lock().map_err(err)?.library_path().map_err(err)?;
-    tauri::async_runtime::spawn_blocking(move || git::publication::preview(&path))
-        .await
-        .map_err(err)?
-        .map_err(err)
+    let cfg = state.config.lock().map_err(err)?.clone();
+    let path = cfg.library_path().map_err(err)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        index::update(&cfg)?;
+        git::publication::preview(&path)
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)
 }
 
 #[tauri::command]
@@ -203,7 +214,9 @@ async fn refine_propose(
 
 #[tauri::command]
 fn refine_accept(state: State<AppState>, kind: ItemKind, proposal: refine::Proposal) -> CmdResult<Skill> {
-    refine::accept(&open_library(&state, kind)?, &proposal).map_err(err)
+    let skill = refine::accept(&open_library(&state, kind)?, &proposal).map_err(err)?;
+    refresh_index(&state)?;
+    Ok(skill)
 }
 
 #[tauri::command]
@@ -276,6 +289,11 @@ fn remember_project(state: State<AppState>, path: PathBuf, target: Target) -> Cm
 fn scan_library(state: State<AppState>, kind: ItemKind) -> CmdResult<LibraryView> {
     let lib = open_library(&state, kind)?;
     let scan = lib.scan().map_err(err)?;
+    // A hand-edited library shows up here first: refresh the index, but never
+    // let a read-only folder stop the library from being displayed.
+    if let Err(e) = refresh_index(&state) {
+        eprintln!("index not refreshed: {}", e.message);
+    }
     let (tags, categories) = Library::facets(&scan.skills);
     Ok(LibraryView {
         kind,
@@ -308,6 +326,7 @@ fn read_skill_file(state: State<AppState>, kind: ItemKind, id: String, rel: Stri
 fn write_skill_file(state: State<AppState>, kind: ItemKind, id: String, rel: String, text: String) -> CmdResult<Skill> {
     let lib = open_library(&state, kind)?;
     lib.write_file(&id, &rel, &text).map_err(err)?;
+    refresh_index(&state)?;
     lib.get(&id).map_err(err)
 }
 
@@ -329,14 +348,17 @@ fn update_meta(state: State<AppState>, kind: ItemKind, id: String, patch: MetaPa
     } else {
         None
     };
-    lib.update_meta(
-        &id,
-        patch.tags.as_deref(),
-        category,
-        patch.hosts.as_deref(),
-        patch.description.as_deref(),
-    )
-    .map_err(err)
+    let skill = lib
+        .update_meta(
+            &id,
+            patch.tags.as_deref(),
+            category,
+            patch.hosts.as_deref(),
+            patch.description.as_deref(),
+        )
+        .map_err(err)?;
+    refresh_index(&state)?;
+    Ok(skill)
 }
 
 #[tauri::command]
@@ -349,21 +371,26 @@ fn create_skill(
     tags: Vec<String>,
     hosts: Vec<String>,
 ) -> CmdResult<Skill> {
-    open_library(&state, kind)?
+    let skill = open_library(&state, kind)?
         .create(&id, &description, category.as_deref(), &tags, &hosts)
-        .map_err(err)
+        .map_err(err)?;
+    refresh_index(&state)?;
+    Ok(skill)
 }
 
 #[tauri::command]
 fn delete_skill(state: State<AppState>, kind: ItemKind, id: String) -> CmdResult<()> {
-    open_library(&state, kind)?.delete(&id).map_err(err)
+    open_library(&state, kind)?.delete(&id).map_err(err)?;
+    refresh_index(&state)
 }
 
 #[tauri::command]
 fn import_skill(state: State<AppState>, kind: ItemKind, path: PathBuf, new_id: Option<String>) -> CmdResult<Skill> {
-    open_library(&state, kind)?
+    let skill = open_library(&state, kind)?
         .import(&path, new_id.as_deref())
-        .map_err(err)
+        .map_err(err)?;
+    refresh_index(&state)?;
+    Ok(skill)
 }
 
 #[tauri::command]

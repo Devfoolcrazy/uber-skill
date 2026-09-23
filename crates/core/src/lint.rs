@@ -62,10 +62,12 @@ pub const CODES: &[&str] = &[
     "link-missing",
     "category-unknown",
     "tag-unknown",
+    "index-missing",
+    "index-stale",
 ];
 
 impl Issue {
-    fn new(
+    pub(crate) fn new(
         severity: Severity,
         rule: &'static str,
         code: &'static str,

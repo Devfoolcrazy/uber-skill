@@ -15,7 +15,7 @@ use crate::config::Config;
 use crate::error::{Error, InputError, Result};
 use crate::frontmatter::{normalize_tag, normalize_tags};
 use crate::fsutil;
-use crate::library::Library;
+use crate::library::libraries;
 use crate::model::{ItemKind, Skill};
 
 pub const REGISTRY_FILE: &str = "uber-skill.yaml";
@@ -133,15 +133,6 @@ impl Registry {
     }
 }
 
-fn libraries(cfg: &Config) -> Result<Vec<Library>> {
-    let mut out = vec![Library::open_kind(cfg.skills_path()?, ItemKind::Skill)?];
-    // A library may have no agents folder yet.
-    if let Ok(agents) = cfg.agents_path().and_then(|p| Library::open_kind(p, ItemKind::Agent)) {
-        out.push(agents);
-    }
-    Ok(out)
-}
-
 fn uses(skill: &Skill, facet: Facet, value: &str) -> bool {
     match facet {
         Facet::Category => skill.category.as_deref() == Some(value),
@@ -230,7 +221,14 @@ pub fn add(cfg: &Config, facet: Facet, value: &str) -> Result<RegistryView> {
 }
 
 /// Replace `from` by `to` (or drop it) in every item using it.
+/// Rewrite every item using `from`, then refresh the index that lists them.
 fn rewrite_items(cfg: &Config, facet: Facet, from: &str, to: Option<&str>) -> Result<()> {
+    rewrite_frontmatters(cfg, facet, from, to)?;
+    crate::index::update(cfg)?;
+    Ok(())
+}
+
+fn rewrite_frontmatters(cfg: &Config, facet: Facet, from: &str, to: Option<&str>) -> Result<()> {
     for lib in libraries(cfg)? {
         for item in lib.scan()?.skills.iter().filter(|s| uses(s, facet, from)) {
             match facet {
@@ -302,6 +300,7 @@ pub fn remove(cfg: &Config, facet: Facet, value: &str, on_used: Option<OnUsed>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::library::Library;
     use std::fs;
     use tempfile::{tempdir, TempDir};
 

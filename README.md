@@ -99,6 +99,7 @@ cargo build -p uber-skill-cli
 ./target/debug/uber-skill registry rename tag quality rigor     # dans le référentiel et tous les éléments
 ./target/debug/uber-skill refine review-pr -m "ajoute un exemple" --apply
 ./target/debug/uber-skill lint
+./target/debug/uber-skill index                                 # INDEX.md : une ligne par skill et agent
 ```
 
 `--json` sur toutes les commandes de lecture, `-k agent` pour travailler sur les agents. La liste complète est dans la [référence](docs/reference.md).

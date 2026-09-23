@@ -445,6 +445,16 @@ fn move_to_trash(path: &Path) -> Result<()> {
     }
 }
 
+/// The skills library and, when the folder exists, the agents library.
+pub fn libraries(cfg: &crate::config::Config) -> Result<Vec<Library>> {
+    let mut out = vec![Library::open_kind(cfg.skills_path()?, ItemKind::Skill)?];
+    // A library may have no agents folder yet.
+    if let Ok(agents) = cfg.agents_path().and_then(|p| Library::open_kind(p, ItemKind::Agent)) {
+        out.push(agents);
+    }
+    Ok(out)
+}
+
 /// Join `rel` under `base` refusing `..` and absolute paths.
 pub fn safe_join(base: &Path, rel: &str) -> Result<PathBuf> {
     let rel_path = Path::new(rel);

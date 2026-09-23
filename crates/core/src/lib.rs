@@ -6,6 +6,7 @@ pub mod error;
 pub mod frontmatter;
 pub mod fsutil;
 pub mod git;
+pub mod index;
 pub mod install;
 pub mod library;
 pub mod lint;

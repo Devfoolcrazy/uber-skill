@@ -278,6 +278,20 @@ Vérifications effectuées : suite Rust complète (56 tests), `pnpm check`, 61 t
 - Existant : recherche par jetons avec score, liste des fichiers texte d’un élément.
 - À décider : recherche à la demande ou index en mémoire construit au scan ; fichiers inclus (Markdown seulement, ou tous les fichiers texte) ; affichage des extraits et ouverture du fichier trouvé à la bonne ligne ; poids du contenu par rapport au nom et aux tags dans le classement.
 
+### 11. Index de la bibliothèque : implémenté, en attente du test utilisateur
+
+- Objectif (demande du 23 septembre 2026) : un `INDEX.md` à la racine de la bibliothèque pour qu'un modèle trouve un skill ou un agent sans ouvrir chaque `SKILL.md`.
+- Décisions validées : fichier généré, jamais écrit à la main ; une ligne par élément (identifiant, catégorie, description, tags, harnais, chemin) en liste plutôt qu'en tableau ; régénéré par le moteur après chaque écriture (création, import, tags, description, éditeur, raffinement, suppression, renommage ou retrait d'une valeur du référentiel), au chargement de la bibliothèque dans l'app et avant l'aperçu de publication ; contenu indépendant de la date pour ne pas polluer Git ; index absent ou périmé signalé par le lint (`index-missing`, `index-stale`).
+- Réalisé : module `index` du `core` (`render`, `status`, `update`, `lint`), commande CLI `index` (`--check` rend le code 1 si périmé), constat d'index dans `lint` sans identifiant, branchement dans toutes les commandes Tauri qui écrivent, libellés français, documentation (référence, guide, README).
+- Vérifications effectuées : suite Rust complète (59 tests, dont 3 sur l'index : rendu trié et déterministe, fichier non réécrit quand rien ne change, détection d'une édition à la main), `pnpm check` sans erreur, 61 tests d'interface, génération sur la bibliothèque réelle (16 skills, 3 agents). L'interface n'a pas été essayée dans l'application réelle.
+- À vérifier par l'utilisateur : ouvrir l'app, vérifier que `INDEX.md` apparaît dans « Publier… » ; modifier un tag depuis l'app et vérifier que la ligne correspondante de l'index change ; éditer un `SKILL.md` à la main hors de l'app, relancer l'app ou `uber-skill index --check`, puis vérifier que l'index est rafraîchi ; lire `INDEX.md` sur GitHub après publication.
+- Hors périmètre : pas d'affichage de l'index dans l'app (il se lit dans le dépôt), pas de lien « Source » dans la fiche (évolution notée ci-dessous).
+
+### 12. Idées issues de l'import du 23 septembre 2026
+
+- Lien « Source » dans la fiche d'un élément importé, à partir des clés `metadata.source`, `source_license` et `imported` ajoutées lors des imports depuis des dépôts tiers.
+- Contrôle des chemins et commandes cassés cités dans les skills (à la manière de la piste A de `harness-eval`) : le lint vérifie déjà les liens Markdown, pas les chemins cités en texte ni les commandes.
+
 ### Écarté pour le moment
 
 - Gestion de branches, fusions et résolution de conflits dans l’application : les outils Git le font mieux, et la décision de s’en remettre à un outil externe a été validée.

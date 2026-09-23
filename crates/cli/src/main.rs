@@ -2,11 +2,11 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand};
-use uber_skill_core::refine;
 use uber_skill_core::registry::{self, Facet, OnUsed};
 use uber_skill_core::{
     git, install, lint, search, Config, DriftState, ItemKind, Library, Query, Registry, RegistryView, Target,
 };
+use uber_skill_core::{index, refine};
 
 #[derive(Parser)]
 #[command(name = "uber-skill", version, about = "Manage a library of agent skills")]
@@ -118,6 +118,12 @@ enum Cmd {
     },
     /// Lint one skill or the whole library
     Lint { id: Option<String> },
+    /// Regenerate INDEX.md at the library root (one line per skill and agent)
+    Index {
+        /// Only report whether the index is up to date (exit 1 when it is not)
+        #[arg(long)]
+        check: bool,
+    },
     /// Install skills into a project
     Install {
         ids: Vec<String>,
@@ -250,6 +256,23 @@ fn open_library(cli: &Cli) -> Result<Library> {
     Library::open_kind(&path, kind).with_context(|| format!("opening {} library {}", kind.label(), path.display()))
 }
 
+/// The configuration the command works with: `--library` stands in for the saved one.
+fn config_for(cli: &Cli) -> Result<Config> {
+    match &cli.library {
+        Some(p) => Ok(Config {
+            library_path: Some(p.clone()),
+            ..Config::default()
+        }),
+        None => Ok(Config::load()?),
+    }
+}
+
+/// Keep INDEX.md in step with the library after a command changed it.
+fn refresh_index(cli: &Cli) -> Result<()> {
+    index::update(&config_for(cli)?)?;
+    Ok(())
+}
+
 /// Root of the library's Git repository.
 fn repository(cli: &Cli) -> Result<PathBuf> {
     match &cli.library {
@@ -311,6 +334,18 @@ fn print_json<T: serde::Serialize>(v: &T) -> Result<()> {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    let changes_library = matches!(
+        cli.cmd,
+        Cmd::New { .. } | Cmd::Tag { .. } | Cmd::Import { .. } | Cmd::Refine { apply: true, .. }
+    );
+    run(&cli)?;
+    if changes_library {
+        refresh_index(&cli)?;
+    }
+    Ok(())
+}
+
+fn run(cli: &Cli) -> Result<()> {
     match &cli.cmd {
         Cmd::Config { cmd } => match cmd {
             ConfigCmd::Show => {
@@ -375,7 +410,7 @@ fn main() -> Result<()> {
         | Cmd::Search {
             tag, category, host, ..
         } => {
-            let lib = open_library(&cli)?;
+            let lib = open_library(cli)?;
             let scan = lib.scan()?;
             let text = match &cli.cmd {
                 Cmd::Search { query, .. } => Some(query.clone()),
@@ -412,10 +447,10 @@ fn main() -> Result<()> {
             for w in &scan.warnings {
                 eprintln!("warning: {}: {}", w.path.display(), w.message);
             }
-            eprintln!("{} {}(s)", hits.len(), kind_of(&cli).label());
+            eprintln!("{} {}(s)", hits.len(), kind_of(cli).label());
         }
         Cmd::Show { id } => {
-            let lib = open_library(&cli)?;
+            let lib = open_library(cli)?;
             let s = lib.get(id)?;
             if cli.json {
                 return print_json(&s);
@@ -457,7 +492,7 @@ fn main() -> Result<()> {
             tag,
             host,
         } => {
-            let lib = open_library(&cli)?;
+            let lib = open_library(cli)?;
             let s = lib.create(id, description, category.as_deref(), tag, host)?;
             println!("created {}", s.path.display());
         }
@@ -473,7 +508,7 @@ fn main() -> Result<()> {
             clear_hosts,
             description,
         } => {
-            let lib = open_library(&cli)?;
+            let lib = open_library(cli)?;
             let current = lib.get(id)?;
             let mut tags: Vec<String> = if set.is_empty() {
                 current.tags.clone()
@@ -513,12 +548,12 @@ fn main() -> Result<()> {
             );
         }
         Cmd::Import { path, r#as } => {
-            let lib = open_library(&cli)?;
+            let lib = open_library(cli)?;
             let s = lib.import(path, r#as.as_deref())?;
             println!("imported {} -> {}", s.id, s.path.display());
         }
         Cmd::Refine { id, message, apply } => {
-            let lib = open_library(&cli)?;
+            let lib = open_library(cli)?;
             let proposal = refine::propose(&lib, id, message)?;
             if cli.json {
                 print_json(&proposal)?;
@@ -539,12 +574,12 @@ fn main() -> Result<()> {
             }
         }
         Cmd::Lint { id } => {
-            let lib = open_library(&cli)?;
+            let lib = open_library(cli)?;
             let skills = match id {
                 Some(id) => vec![lib.get(id)?],
                 None => lib.scan()?.skills,
             };
-            let registry = match repository(&cli) {
+            let registry = match repository(cli) {
                 Ok(root) => Registry::load(&root)?,
                 Err(_) => None,
             };
@@ -574,6 +609,21 @@ fn main() -> Result<()> {
                     );
                 }
             }
+            if id.is_none() {
+                if let Some(issue) = index::lint(&config_for(cli)?)? {
+                    if cli.json {
+                        report.push(serde_json::json!({ "id": null, "issues": [issue] }));
+                    } else {
+                        println!("{}:", index::INDEX_FILE);
+                        println!(
+                            "  {:<7} {:<12} {}",
+                            format!("{:?}", issue.severity).to_lowercase(),
+                            issue.rule,
+                            issue.message
+                        );
+                    }
+                }
+            }
             if cli.json {
                 print_json(&report)?;
             }
@@ -581,11 +631,30 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
         }
+        Cmd::Index { check } => {
+            let cfg = config_for(cli)?;
+            let status = if *check {
+                index::status(&cfg)?
+            } else {
+                index::update(&cfg)?
+            };
+            if cli.json {
+                return print_json(&status);
+            }
+            match (status.exists, status.fresh) {
+                (true, true) => println!("{} is up to date", status.path.display()),
+                (false, _) => println!("{} is missing", status.path.display()),
+                (true, false) => println!("{} is out of date", status.path.display()),
+            }
+            if *check && !status.fresh {
+                std::process::exit(1);
+            }
+        }
         Cmd::Install { ids, project } => {
             if ids.is_empty() {
                 bail!("give at least one skill id");
             }
-            let lib = open_library(&cli)?;
+            let lib = open_library(cli)?;
             let (root, target) = project_root(project)?;
             let dir = target.dir_for(lib.kind(), &root)?;
             for id in ids {
@@ -605,14 +674,14 @@ fn main() -> Result<()> {
         Cmd::Uninstall { ids, project } => {
             let (root, target) = project_root(project)?;
             for id in ids {
-                install::uninstall(id, &root, &target, kind_of(&cli))?;
+                install::uninstall(id, &root, &target, kind_of(cli))?;
                 println!("removed {id}");
             }
         }
         Cmd::Status { project } => {
-            let lib = open_library(&cli).ok();
+            let lib = open_library(cli).ok();
             let (root, target) = project_root(project)?;
-            let kind = kind_of(&cli);
+            let kind = kind_of(cli);
             let st = install::status(lib.as_ref(), &root, &target, kind)?;
             if cli.json {
                 return print_json(&st);
@@ -637,7 +706,7 @@ fn main() -> Result<()> {
             }
         }
         Cmd::Diff { id, project } => {
-            let lib = open_library(&cli)?;
+            let lib = open_library(cli)?;
             let (root, target) = project_root(project)?;
             let diffs = install::diff_installed(&lib, id, &root, &target)?;
             if cli.json {
@@ -652,7 +721,7 @@ fn main() -> Result<()> {
             }
         }
         Cmd::Sync { id, direction, project } => {
-            let lib = open_library(&cli)?;
+            let lib = open_library(cli)?;
             let (root, target) = project_root(project)?;
             match direction.as_str() {
                 "pull" => {
@@ -666,7 +735,7 @@ fn main() -> Result<()> {
             }
         }
         Cmd::Adopt { id, project } => {
-            let lib = open_library(&cli)?;
+            let lib = open_library(cli)?;
             let (root, target) = project_root(project)?;
             install::adopt(&lib, id, &root, &target)?;
             println!("adopted {id}");
@@ -703,7 +772,7 @@ fn main() -> Result<()> {
             print_registry(&view);
         }
         Cmd::Remote { cmd } => {
-            let root = repository(&cli)?;
+            let root = repository(cli)?;
             match cmd {
                 RemoteCmd::Status => {
                     let status = git::sync::check(&root)?;
@@ -722,6 +791,7 @@ fn main() -> Result<()> {
                     print_sync_status(&status);
                 }
                 RemoteCmd::Publish { files, all, message } => {
+                    refresh_index(cli)?;
                     let preview = git::publication::preview(&root)?;
                     let paths: Vec<String> = if *all {
                         preview.files.iter().map(|f| f.path.clone()).collect()

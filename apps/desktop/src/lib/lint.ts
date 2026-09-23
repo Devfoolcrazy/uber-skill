@@ -31,6 +31,8 @@ const FINDINGS: Record<string, (args: string[]) => string> = {
     (suggestion ? `. Ce fichier existe ici : ${suggestion}` : ""),
   "category-unknown": ([value]) => `La catégorie « ${value} » est absente du référentiel.`,
   "tag-unknown": ([value]) => `Le tag « ${value} » est absent du référentiel.`,
+  "index-missing": () => "INDEX.md est absent de la bibliothèque : il sera généré à la prochaine modification.",
+  "index-stale": () => "INDEX.md ne correspond plus aux éléments de la bibliothèque : il sera régénéré à la prochaine modification.",
 };
 
 export function issueText(issue: Issue): string {

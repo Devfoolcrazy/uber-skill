@@ -22,6 +22,7 @@ apps/desktop     app Tauri v2 + SvelteKit
 - **Dérive** : à partir du verrou, chaque skill installé est `up-to-date`, `library-updated`, `project-modified`, `conflict`, `untracked`, `missing` ou `source-missing`. On peut voir le diff, tirer la version bibliothèque (`pull`) ou remonter la version projet (`push`).
 - **Harnais** : un skill est universel par défaut. S'il dépend d'un outil (frontmatter `allowed-tools`, outils MCP, sous-agents…), on le déclare dans `metadata.hosts` (`claude-code`, `codex`, `cursor`, `copilot`). L'app filtre dessus et avertit à l'installation si la cible ne correspond pas.
 - **Référentiel** : `uber-skill.yaml` à la racine de la bibliothèque liste les catégories et tags autorisés, communs aux skills et aux agents, et versionnés avec eux. Il est tolérant : une valeur absente du référentiel ne bloque ni le scan, ni l'import, ni l'édition ; elle est seulement signalée comme inconnue. Sans ce fichier, toutes les valeurs sont acceptées.
+- **Index** : `INDEX.md` à la racine de la bibliothèque, une ligne par skill et par agent (identifiant, catégorie, description, tags, harnais, chemin), généré à partir des frontmatters pour qu'un lecteur ou un modèle trouve un élément sans ouvrir chaque `SKILL.md`. C'est une vue dérivée, jamais une source : l'app et le CLI le régénèrent après chaque modification qu'ils font, l'app le rafraîchit au chargement de la bibliothèque et avant « Publier… », et le lint signale un index absent ou périmé (édition à la main). Son contenu ne dépend que des éléments, pas de la date, donc il ne change dans Git que lorsqu'un élément change.
 - **Lint** : nom = dossier, description présente et < 1024 caractères, corps non vide, liens relatifs existants dans tous les fichiers Markdown du skill (avec suggestion quand un fichier du même nom existe ailleurs), hosts connus, catégorie et tags présents dans le référentiel (avertissement).
 
 Frontmatter reconnu :
@@ -48,6 +49,7 @@ cargo build -p uber-skill-cli
 ./target/debug/uber-skill tag review-pr --add quality --category review --host claude-code
 ./target/debug/uber-skill list --host codex   # skills utilisables dans Codex
 ./target/debug/uber-skill lint
+./target/debug/uber-skill index            # régénère INDEX.md ; --check pour seulement vérifier (code 1 si périmé)
 ./target/debug/uber-skill install review-pr commit-message -p ~/mon/projet -t claude
 ./target/debug/uber-skill status -p ~/mon/projet
 ./target/debug/uber-skill diff review-pr -p ~/mon/projet
