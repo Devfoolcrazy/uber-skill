@@ -15,6 +15,7 @@ pub mod projects;
 pub mod refine;
 pub mod registry;
 pub mod search;
+pub mod suggest;
 pub mod targets;
 
 pub use config::Config;

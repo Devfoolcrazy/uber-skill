@@ -97,6 +97,8 @@ pub enum RefineError {
     InvalidAnswer(String),
     #[error("empty request")]
     EmptyInstruction,
+    #[error("claude did not return a list of suggestions: {0}")]
+    InvalidSuggestions(String),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -204,6 +206,7 @@ impl Error {
                 RefineError::Timeout => "refine.timeout",
                 RefineError::InvalidAnswer(_) => "refine.invalid-answer",
                 RefineError::EmptyInstruction => "refine.empty-instruction",
+                RefineError::InvalidSuggestions(_) => "suggest.invalid-answer",
             },
             Error::NotADirectory(_) => "not-a-directory",
             Error::Json(_) => "json",
@@ -228,9 +231,9 @@ impl Error {
             Error::InvalidInput(InputError::RegistryValue(value) | InputError::RegistryValueInUse(value)) => {
                 Some(value.clone())
             }
-            Error::Refine(RefineError::ClaudeFailed(why) | RefineError::InvalidAnswer(why)) => {
-                Some(why.clone()).filter(|w| !w.is_empty())
-            }
+            Error::Refine(
+                RefineError::ClaudeFailed(why) | RefineError::InvalidAnswer(why) | RefineError::InvalidSuggestions(why),
+            ) => Some(why.clone()).filter(|w| !w.is_empty()),
             Error::Refine(_) => None,
             Error::NotADirectory(path) => Some(path.display().to_string()),
             Error::Json(e) => Some(e.to_string()),
@@ -338,6 +341,7 @@ mod tests {
             RefineError::Timeout,
             RefineError::InvalidAnswer("no frontmatter".into()),
             RefineError::EmptyInstruction,
+            RefineError::InvalidSuggestions("not json".into()),
         ] {
             all.push(Error::Refine(refine));
         }

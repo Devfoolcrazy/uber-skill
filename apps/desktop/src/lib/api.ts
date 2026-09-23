@@ -183,6 +183,16 @@ export interface BatchPlan {
   root: string; git: GitSyncStatus | null; git_error: ErrorPayload | null;
   jobs: { project: string; plan: InstallationPlan }[];
 }
+export interface SuggestProfile { kind: string | null; stack: string | null; goal: string | null }
+export interface SuggestExcerpt { path: string; text: string; truncated: boolean }
+/// Everything about a project that would leave the machine when asking Claude for suggestions.
+export interface SuggestContext {
+  project: string; empty: boolean; tree: string[]; tree_truncated: boolean;
+  excerpts: SuggestExcerpt[]; installed: string[]; catalogue_items: number;
+}
+export type Confidence = "high" | "medium" | "low";
+export interface Suggestion { kind: ItemKind; id: string; reason: string; confidence: Confidence; installed: boolean }
+export interface Suggestions { summary: string; suggestions: Suggestion[]; unknown: string[] }
 export interface TargetInstall { target: Target; kind: ItemKind; items: InstalledSkill[] }
 export interface ProjectOverview { path: string; name: string; exists: boolean; global: boolean; installs: TargetInstall[]; behind: number }
 /// Harnesses with per-user folders the app manages (Claude Code, Codex).
@@ -208,6 +218,8 @@ export const api = {
   refinePropose: (kind: ItemKind, id: string, instruction: string) =>
     invoke<RefineProposal>("refine_propose", { kind, id, instruction }),
   refineAccept: (kind: ItemKind, proposal: RefineProposal) => invoke<Skill>("refine_accept", { kind, proposal }),
+  suggestContext: (project: string) => invoke<SuggestContext>("suggest_context", { project }),
+  suggestItems: (project: string, profile: SuggestProfile) => invoke<Suggestions>("suggest_items", { project, profile }),
   getRegistry: () => invoke<RegistryView>("get_registry"),
   registryInit: () => invoke<RegistryView>("registry_init"),
   registryAdd: (facet: Facet, value: string) => invoke<RegistryView>("registry_add", { facet, value }),

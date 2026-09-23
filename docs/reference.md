@@ -49,6 +49,7 @@ cargo build -p uber-skill-cli
 ./target/debug/uber-skill tag review-pr --add quality --category review --host claude-code
 ./target/debug/uber-skill list --host codex   # skills utilisables dans Codex
 ./target/debug/uber-skill lint
+./target/debug/uber-skill suggest -p ~/mon/projet --goal "écrire le lore"   # Claude propose des skills ; --dry-run montre ce qui part
 ./target/debug/uber-skill index            # régénère INDEX.md ; --check pour seulement vérifier (code 1 si périmé)
 ./target/debug/uber-skill install review-pr commit-message -p ~/mon/projet -t claude
 ./target/debug/uber-skill status -p ~/mon/projet
@@ -249,6 +250,29 @@ fichier a changé entre-temps, l’acceptation est refusée.
 - Ni le raffinement ni le lint ne valident le comportement d’un skill : essayez-le dans un projet.
 
 En ligne de commande : `uber-skill refine <id> -m "consigne"` affiche le diff, `--apply` l’enregistre.
+
+### Suggérer des skills pour un projet
+
+**Suggérer des skills…** (vue Projets, sur un projet suivi) demande à Claude quels skills et agents de la
+bibliothèque conviennent à ce projet, puis affiche une liste cochable avec une raison par élément et un niveau
+de confiance. **Installer la sélection** passe par la vérification d’installation habituelle ; rien n’est
+installé sans cette étape.
+
+- Même mécanisme que le raffinement : `claude -p`, sans outil, hors du projet et de la bibliothèque ;
+  `UBER_SKILL_CLAUDE` désigne un autre exécutable.
+- Ce qui est envoyé, et affiché avant de demander : l’index `INDEX.md` de la bibliothèque, l’arborescence du
+  projet sur trois niveaux (dépendances, sorties de build et dossiers cachés omis, sauf `.claude`, `.agents`,
+  `.cursor`, `.github`, `.codex` ; 200 entrées au plus), le texte des fichiers de racine connus (README,
+  CLAUDE.md, AGENTS.md, CONTEXT.md, Cargo.toml, package.json, pyproject.toml… tronqués à 4 000 caractères),
+  la liste de ce que la bibliothèque y a déjà installé, et trois réponses facultatives : type de projet, stack,
+  ce que vous allez y faire. Aucun fichier source n’est envoyé. Un dossier vide est signalé : les réponses
+  remplacent alors le scan.
+- La réponse est vérifiée : un identifiant absent de la bibliothèque est ignoré et listé ; un élément déjà
+  installé reste visible mais décoché ; un agent est décoché pour une cible qui n’a pas de dossier d’agents.
+- Les suggestions sont un avis. Claude propose entre trois et dix éléments, les plus utiles d’abord.
+
+En ligne de commande : `uber-skill suggest -p <projet> [--kind …] [--stack …] [--goal …]` ; `--dry-run`
+montre seulement ce qui serait envoyé, `--json` rend la liste brute.
 
 ### Tags et catégories
 

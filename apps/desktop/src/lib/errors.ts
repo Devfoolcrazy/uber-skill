@@ -59,6 +59,7 @@ const MESSAGES: Record<string, string> = {
   "refine.timeout": "Claude n’a pas répondu à temps. Réessayez, éventuellement avec une consigne plus ciblée.",
   "refine.invalid-answer": "La réponse de Claude n’est pas un SKILL.md valide. Rien n’a été modifié ; réessayez.",
   "refine.empty-instruction": "Indiquez ce que Claude doit améliorer.",
+  "suggest.invalid-answer": "La réponse de Claude n’est pas une liste de suggestions exploitable. Rien n’a été installé ; réessayez.",
 
   "input.not-repository-root": "Choisissez la racine du dépôt Git.",
   "input.clone-url": "Indiquez une URL de dépôt Git valide.",

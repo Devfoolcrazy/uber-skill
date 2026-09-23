@@ -3,8 +3,10 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { api, targetKey, targetLabel, type FileDiff, type InstalledSkill, type InstallRequest, type ItemKind, type ProjectOverview, type TargetInstall } from "$lib/api";
   import { store, DRIFT_LABEL } from "$lib/store.svelte";
+  import SuggestDialog from "./SuggestDialog.svelte";
 
   let selectedPath = $state<string | null>(null);
+  let suggestFor = $state<ProjectOverview | null>(null);
   let diff = $state<{ id: string; files: FileDiff[] } | null>(null);
 
   const selected = $derived(store.projects.find((p) => p.path === selectedPath) ?? store.projects[0] ?? null);
@@ -112,6 +114,9 @@
           {#if selected.exists && selected.behind > 0}
             <button class="small primary" onclick={() => store.requestInstalls(behindRequests(selected))}>Tout mettre à jour ({selected.behind})</button>
           {/if}
+          {#if selected.exists && !selected.global}
+            <button class="small" title="Demander à Claude quels skills et agents de la bibliothèque conviennent à ce projet" onclick={() => (suggestFor = selected)}>Suggérer des skills…</button>
+          {/if}
           {#if selected.exists && selected.path !== store.projectPath}
             <button class="small" title={selected.global ? "Installer globalement depuis la bibliothèque" : "En faire le projet courant et revenir à la bibliothèque"} onclick={() => workIn(selected)}>{selected.global ? "Installer globalement…" : "Travailler dans ce projet"}</button>
           {/if}
@@ -170,6 +175,10 @@
     {/if}
   </section>
 </div>
+
+{#if suggestFor}
+  <SuggestDialog project={suggestFor} onclose={() => (suggestFor = null)} />
+{/if}
 
 {#if diff}
   <div class="modal-bg" role="presentation" onclick={() => (diff = null)}>

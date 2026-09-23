@@ -46,6 +46,8 @@ Les skills déjà présents dans les dossiers globaux, installés à la main, ap
 
 L'onglet « Projets » répond à « où ce skill est-il installé, et où est-il en retard ? ». Un projet est suivi dès qu'un élément y est installé ; « + Suivre un projet… » en ajoute un, « Retirer de la liste » cesse de le suivre sans rien supprimer. Un dossier déplacé reste listé, marqué « introuvable ». « Tout mettre à jour » ne touche que les copies simplement en retard.
 
+**Suggérer des skills…** demande à Claude (`claude -p`, sans outil) quels éléments de la bibliothèque conviennent au projet. La fenêtre dit d'abord ce qui part : l'index de la bibliothèque, l'arborescence du projet, le texte du README et des manifestes, la liste de ce qui est déjà installé, et vos trois réponses facultatives. Aucun fichier source. Vous cochez ce que vous gardez, puis l'installation suit la vérification habituelle.
+
 ## Créer, décrire, vérifier
 
 - **+ Nouveau skill / agent** crée un brouillon à partir d'un modèle court (objectif, instructions, exemple) et l'ouvre dans l'éditeur.
@@ -62,4 +64,4 @@ L'onglet « Projets » répond à « où ce skill est-il installé, et où est-i
 
 ## Ce qui reste hors de l'application
 
-Les branches, fusions et conflits Git se règlent dans un outil Git externe ; l'application ne fait que des avances rapides et des pushs sans force. La commande `claude` doit être installée et connectée pour « Raffiner… ». Le CLI `uber-skill` offre les mêmes opérations en ligne de commande (`list`, `install`, `status`, `remote`, `registry`, `refine`, `lint`, `index`) ; `install -p ~` installe globalement.
+Les branches, fusions et conflits Git se règlent dans un outil Git externe ; l'application ne fait que des avances rapides et des pushs sans force. La commande `claude` doit être installée et connectée pour « Raffiner… ». Le CLI `uber-skill` offre les mêmes opérations en ligne de commande (`list`, `install`, `status`, `remote`, `registry`, `refine`, `suggest`, `lint`, `index`) ; `install -p ~` installe globalement.

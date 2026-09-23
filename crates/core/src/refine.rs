@@ -89,8 +89,8 @@ struct CliResult {
 }
 
 /// Run `claude -p` with `prompt` on stdin, in an empty directory, without tools,
-/// MCP servers or a saved session.
-fn ask_claude(claude: &Path, prompt: &str) -> Result<String> {
+/// MCP servers or a saved session. Shared with [`crate::suggest`].
+pub(crate) fn ask_claude(claude: &Path, system_prompt: &str, prompt: &str) -> Result<String> {
     let workdir = tempfile::tempdir().map_err(|e| Error::io("temporary directory", e))?;
     let failed = |what: String| Error::Refine(RefineError::ClaudeFailed(what));
     let mut child = Command::new(claude)
@@ -103,7 +103,7 @@ fn ask_claude(claude: &Path, prompt: &str) -> Result<String> {
             "--strict-mcp-config",
             "--no-session-persistence",
         ])
-        .args(["--system-prompt", SYSTEM_PROMPT])
+        .args(["--system-prompt", system_prompt])
         .env("PATH", search_path(claude))
         .current_dir(workdir.path())
         .stdin(Stdio::piped())
@@ -151,7 +151,7 @@ fn ask_claude(claude: &Path, prompt: &str) -> Result<String> {
 }
 
 /// Drop a code fence wrapped around the whole answer despite the instructions.
-fn unfenced(answer: &str) -> &str {
+pub(crate) fn unfenced(answer: &str) -> &str {
     let trimmed = answer.trim();
     let Some(rest) = trimmed.strip_prefix("```") else {
         return trimmed;
@@ -236,7 +236,7 @@ pub fn propose(library: &Library, id: &str, instruction: &str) -> Result<Proposa
     }
     let original = library.read_main(id)?;
     let claude = claude_path()?;
-    let answer = ask_claude(&claude, &prompt(instruction, &original))?;
+    let answer = ask_claude(&claude, SYSTEM_PROMPT, &prompt(instruction, &original))?;
     let path = main_file(&library.item_path(id)?, ItemKind::Skill);
     let (proposed, restored_keys) = locked(&original, &answer, &path)?;
     Ok(Proposal {
@@ -258,8 +258,12 @@ pub fn accept(library: &Library, proposal: &Proposal) -> Result<Skill> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    /// The `claude` executable is chosen through the process environment: tests
+    /// that set it (here and in `suggest`) take this lock.
+    pub(crate) static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     const ORIGINAL: &str = "---\nname: review-pr\n# keep\ndescription: Review a PR\nallowed-tools: Read, Grep\nmetadata:\n  tags: git\n---\n# review-pr\n\nOld body\n";
 
@@ -306,12 +310,9 @@ mod tests {
     #[cfg(unix)]
     mod with_a_fake_cli {
         use super::super::*;
+        use super::ENV;
         use std::fs;
         use std::os::unix::fs::PermissionsExt;
-        use std::sync::Mutex;
-
-        // The executable is chosen through the process environment.
-        static ENV: Mutex<()> = Mutex::new(());
 
         fn library(script: &str) -> (tempfile::TempDir, Library) {
             let tmp = tempfile::tempdir().unwrap();

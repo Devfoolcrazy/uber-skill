@@ -6,7 +6,7 @@ use uber_skill_core::registry::{self, Facet, OnUsed};
 use uber_skill_core::{
     git, install, lint, search, Config, DriftState, ItemKind, Library, Query, Registry, RegistryView, Target,
 };
-use uber_skill_core::{index, refine};
+use uber_skill_core::{index, refine, suggest};
 
 #[derive(Parser)]
 #[command(name = "uber-skill", version, about = "Manage a library of agent skills")]
@@ -118,6 +118,24 @@ enum Cmd {
     },
     /// Lint one skill or the whole library
     Lint { id: Option<String> },
+    /// Ask Claude (`claude -p`) which skills and agents fit a project; installs nothing
+    Suggest {
+        /// Project root (default: current directory)
+        #[arg(short, long, default_value = ".")]
+        project: PathBuf,
+        /// Kind of project (game, desktop app, web site…), for a new or unusual folder
+        #[arg(long)]
+        kind: Option<String>,
+        /// Languages, frameworks, tools
+        #[arg(long)]
+        stack: Option<String>,
+        /// What you are about to do in it
+        #[arg(long)]
+        goal: Option<String>,
+        /// Only show what would be sent to Claude
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Regenerate INDEX.md at the library root (one line per skill and agent)
     Index {
         /// Only report whether the index is up to date (exit 1 when it is not)
@@ -629,6 +647,72 @@ fn run(cli: &Cli) -> Result<()> {
             }
             if total_errors > 0 {
                 std::process::exit(1);
+            }
+        }
+        Cmd::Suggest {
+            project,
+            kind,
+            stack,
+            goal,
+            dry_run,
+        } => {
+            let cfg = config_for(cli)?;
+            let project = project
+                .canonicalize()
+                .with_context(|| format!("project {}", project.display()))?;
+            if *dry_run {
+                let context = suggest::gather(&cfg, &project)?;
+                if cli.json {
+                    return print_json(&context);
+                }
+                println!("would send to Claude for {}:", context.project.display());
+                println!("  library index: {} item(s)", context.catalogue_items);
+                println!(
+                    "  tree: {} entr{}{}",
+                    context.tree.len(),
+                    if context.tree.len() == 1 { "y" } else { "ies" },
+                    if context.tree_truncated { " (truncated)" } else { "" }
+                );
+                for e in &context.excerpts {
+                    println!("  file: {}{}", e.path, if e.truncated { " (truncated)" } else { "" });
+                }
+                println!(
+                    "  installed: {}",
+                    if context.installed.is_empty() {
+                        "nothing".to_string()
+                    } else {
+                        context.installed.join(", ")
+                    }
+                );
+                return Ok(());
+            }
+            let profile = suggest::Profile {
+                kind: kind.clone(),
+                stack: stack.clone(),
+                goal: goal.clone(),
+            };
+            let result = suggest::suggest(&cfg, &project, &profile)?;
+            if cli.json {
+                return print_json(&result);
+            }
+            if !result.summary.is_empty() {
+                println!("{}\n", result.summary);
+            }
+            for s in &result.suggestions {
+                println!(
+                    "{:<6} {:<32} {:<7}{} {}",
+                    s.kind.label(),
+                    s.id,
+                    format!("{:?}", s.confidence).to_lowercase(),
+                    if s.installed { " (installed)" } else { "" },
+                    s.reason
+                );
+            }
+            if result.suggestions.is_empty() {
+                println!("no suggestion");
+            }
+            if !result.unknown.is_empty() {
+                eprintln!("ignored, not in the library: {}", result.unknown.join(", "));
             }
         }
         Cmd::Index { check } => {

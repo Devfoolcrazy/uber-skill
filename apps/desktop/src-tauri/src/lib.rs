@@ -11,7 +11,7 @@ use uber_skill_core::{
     git, install, lint, search, Config, Error, ErrorPayload, FileDiff, InstalledSkill, Issue, ItemKind, Library,
     LockEntry, Query, Registry, RegistryView, Skill, Target,
 };
-use uber_skill_core::{index, refine};
+use uber_skill_core::{index, refine, suggest};
 
 struct AppState {
     config: Mutex<Config>,
@@ -207,6 +207,27 @@ async fn refine_propose(
 ) -> CmdResult<refine::Proposal> {
     let lib = open_library(&state, kind)?;
     tauri::async_runtime::spawn_blocking(move || refine::propose(&lib, &id, &instruction))
+        .await
+        .map_err(err)?
+        .map_err(err)
+}
+
+/// What would be sent to Claude for a project: shown before asking.
+#[tauri::command]
+fn suggest_context(state: State<AppState>, project: PathBuf) -> CmdResult<suggest::Context> {
+    let cfg = state.config.lock().map_err(err)?.clone();
+    suggest::gather(&cfg, &project).map_err(err)
+}
+
+/// Ask Claude which items fit a project. Runs off the UI thread; installs nothing.
+#[tauri::command]
+async fn suggest_items(
+    state: State<'_, AppState>,
+    project: PathBuf,
+    profile: suggest::Profile,
+) -> CmdResult<suggest::Suggestions> {
+    let cfg = state.config.lock().map_err(err)?.clone();
+    tauri::async_runtime::spawn_blocking(move || suggest::suggest(&cfg, &project, &profile))
         .await
         .map_err(err)?
         .map_err(err)
@@ -602,6 +623,8 @@ pub fn run() {
             library_git_states,
             refine_propose,
             refine_accept,
+            suggest_context,
+            suggest_items,
             get_registry,
             registry_init,
             registry_add,

@@ -98,6 +98,7 @@ cargo build -p uber-skill-cli
 ./target/debug/uber-skill remote publish --all -m "Clarifie review-pr"
 ./target/debug/uber-skill registry rename tag quality rigor     # dans le référentiel et tous les éléments
 ./target/debug/uber-skill refine review-pr -m "ajoute un exemple" --apply
+./target/debug/uber-skill suggest -p ~/mon/projet                 # Claude propose des skills de la bibliothèque
 ./target/debug/uber-skill lint
 ./target/debug/uber-skill index                                 # INDEX.md : une ligne par skill et agent
 ```
